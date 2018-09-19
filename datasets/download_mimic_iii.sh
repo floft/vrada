@@ -2,9 +2,8 @@
 #
 # Download MIMIC-III (requires login info in .netrc, see ../README.md)
 #
-# They give a line for wget, but I don't want to hours days for it to download
-# when I have a 1 GiB connection. This will download in a matter of minutes at
-# 40 MiB/s.
+# Using aria2c rather than wget allows this to download a lot faster if you
+# have a reasonably-fast Internet connection.
 #
 dir="mimic-iii"
 mkdir -p "$dir"

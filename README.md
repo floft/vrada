@@ -9,6 +9,20 @@ they called this Variational Adversarial Deep Domain Adaptation (VADDA).  It's
 more-or-less the same method though they might do iterative optimization
 slightly differently.
 
+You have a choice of running with or without domain adaptation and with two types
+of RNNs. In their paper, they refer to the LSTM with domain adaptation as "R-DANN"
+and the VRNN with domain adaptation as "VRADA."
+
+ - *--lstm* -- use LSTM without adaptation
+ - *--vrnn* -- use VRNN without adaptation
+ - *--lstm-da* -- use LSTM with adaptation
+ - *--vrnn-da* -- use VRNN with adaptation
+
+To try these out, make sure you clone the repository recursively since there's submodules:
+
+    git clone --recursive https://github.com/floft/vrada
+    cd vrada
+
 ## Datasets
 
 ### Small Synthetic Dataset
