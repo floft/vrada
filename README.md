@@ -15,8 +15,8 @@ and the VRNN with domain adaptation as "VRADA."
 
  - *--lstm* -- use LSTM without adaptation
  - *--vrnn* -- use VRNN without adaptation
- - *--lstm-da* -- use LSTM with adaptation
- - *--vrnn-da* -- use VRNN with adaptation
+ - *--lstm-da* -- use LSTM with adaptation (R-DANN)
+ - *--vrnn-da* -- use VRNN with adaptation (VRADA/VADDA)
 
 To try these out, make sure you clone the repository recursively since there's submodules:
 
