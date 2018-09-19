@@ -313,10 +313,15 @@ def train(data_info,
             tsne = TSNE(n_components=2, init='pca', n_iter=3000).fit_transform(embedding)
             pca = PCA(n_components=2).fit_transform(embedding)
 
+            if adaptation:
+                title = "Domain Adaptation"
+            else:
+                title = "No Adaptation"
+
             plot_embedding(tsne, combined_labels.argmax(1), combined_domain.argmax(1),
-                title='Domain Adaptation', filename=os.path.join(img_dir, embedding_prefix+"_tsne.png"))
+                title=title + " - t-SNE", filename=os.path.join(img_dir, embedding_prefix+"_tsne.png"))
             plot_embedding(pca, combined_labels.argmax(1), combined_domain.argmax(1),
-                title='Domain Adaptation', filename=os.path.join(img_dir, embedding_prefix+"_pca.png"))
+                title=title + " - PCA", filename=os.path.join(img_dir, embedding_prefix+"_pca.png"))
 
             # Output time-series "reconstructions" from our generator (if VRNN)
             if extra_model_outputs is not None:
