@@ -1,0 +1,70 @@
+#!/bin/bash
+#SBATCH --job-name=VRADA
+#SBATCH --output=slurm_logs/vrada_%j.out
+#SBATCH --error=slurm_logs/vrada_%j.err
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=4
+#SBATCH --nodes=1-1
+#SBATCH --gres=gpu:tesla:1
+#SBATCH --partition=taylor,kamiak,cahnrs_gpu,free_gpu,vcea,cahnrs,cahnrs_bigmem
+#SBATCH --time=4-00:00:00
+#SBATCH --mem=50G
+
+. kamiak_config.sh
+
+#
+# ---
+#
+
+method=$1
+if [[ -z $method ]]; then
+    echo "Specify which method to use (e.g. --vrnn-da)"
+    exit 1
+else
+    echo "Method: $method"
+fi
+
+export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
+module load cuda/9.0.176 cudnn/7.1.2_cuda9.0 python3/3.5.0
+data="$remotedir"
+
+function clean_up 
+{
+    rmworkspace -a -f --name="$SCRATCHDIR"
+    exit
+}
+
+# Create a scratch workspace
+SCRATCHDIR="$(mkworkspace -q -t 7-00:00 -b /local)" # 7 days
+trap 'clean_up' EXIT
+
+echo "Scratch space: $SCRATCHDIR"
+echo "SLURM_CPUS_PER_TASK: $SLURM_CPUS_PER_TASK"
+echo "SLURM_JOB_GPUS: $SLURM_JOB_GPUS"
+
+# Get data
+echo "Getting data: started"
+cd "$SCRATCHDIR"
+echo " - program"
+cp -a "$data"/*.py .
+echo " - dataset"
+cp -a "$data/$compressedDataset" .
+unzip "$compressedDataset"
+echo "Getting data: done"
+
+# Install dependencies
+echo "Making sure TensorFlow installed: starting"
+pip install --user tensorflow-gpu pillow lxml jupyter matplotlib pandas sklearn scipy
+echo "Making sure TensorFlow installed: done"
+
+# Train
+echo "Training network: started"
+mkdir -p "$data/$logFolder/" # log dir, rsync this to view with TensorBoard
+python3 "$program" --logdir "$data/$logFolder" --modeldir "$data/$modelFolder" \
+    --imgdir "$data/$imgFolder" --debug "$method"
+echo "Training network: done"
+
+# Cleanup
+echo "Deleting workspace: started"
+clean_up
+echo "Deleting workspace: done"

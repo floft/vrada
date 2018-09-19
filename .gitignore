@@ -1,0 +1,14 @@
+__pycache__/
+.ipynb_checkpoints/
+.vscode/
+
+# TensorFlow files
+trivial/
+*model*/
+*log*/
+
+# Binary files
+*.npy
+*.png
+*.gz
+*.zip
