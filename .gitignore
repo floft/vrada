@@ -4,6 +4,7 @@ __pycache__/
 
 # TensorFlow files
 trivial/
+mimic-iii/
 *model*/
 *log*/
 
