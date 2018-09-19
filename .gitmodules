@@ -1,3 +1,6 @@
 [submodule "datasets/process-mimic-iii"]
 	path = datasets/process-mimic-iii
 	url = https://github.com/USC-Melady/Benchmarking_DL_MIMICIII.git
+[submodule "datasets/mimic-code"]
+	path = datasets/mimic-code
+	url = https://github.com/MIT-LCP/mimic-code.git
