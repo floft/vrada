@@ -11,14 +11,33 @@ slightly differently.
 
 ## Datasets
 
-This method uses RNNs, so requires time-series datasets. Some trivial datasets
-can be generated using `python3 datasets/generate_trivial_datasets.py`. These
-trivial datasets are in the same format as those from
+### Small Synthetic Dataset
+
+This method uses RNNs, so requires time-series datasets. For initial testing,
+some trivial datasets can be generated using `python3 datasets/generate_trivial_datasets.py`.
+These trivial datasets are in the same format as those from
 [UCR Time Series Classification Archive](http://www.cs.ucr.edu/~eamonn/time_series_data/).
+You could also try downloading those UCR datasets and doing adaptation between
+some of them; though, I have not tried this.
+
+### MIMIC-III Health Care Dataset
 
 The original paper used data from the
-[MIMIC-III health care dataset](https://mimic.physionet.org/). This will be
-added shortly.
+[MIMIC-III health care dataset](https://mimic.physionet.org/). We will use
+[code provided](https://github.com/USC-Melady/Benchmarking_DL_MIMICIII)
+for [another paper](https://arxiv.org/abs/1710.08531) that creates various datasets from
+MIMIC-III.
+
+First you have to get access to MIMIC-III, which requires taking an online CITI course.
+After you're approved, then you can download MIMIC-III either following
+[their examples](https://github.com/MIT-LCP/mimic-code) or by running
+`datasets/download_mimic_iii.sh` after adding a line with your username and password
+to your *~/.netrc* file:
+
+    machine physionet.org login <yourusername> password <yourpassword>
+
+Once downloaded (~6.6 GiB), you can generate the .tfrecord files by running
+`python3 datasets/generate_mimic_iii.py`.
 
 ## Usage
 
