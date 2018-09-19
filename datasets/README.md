@@ -45,50 +45,56 @@ I'm on Arch, so I installed with
 `sudo pacman -S postgresql`. Then since I don't have enough disk space on my root
 partition, I told it to put the database in my home directory by running
 `sudo -E systemctl edit postgresql.service` (replace "/pathto" with wherever
-you want to put the database):
+you want to put the database).
 
     [Service]
     Environment=PGROOT=/path/pgroot
     PIDFile=/pathto/pgroot/data/postmaster.pid
     ProtectHome=false
 
-Created the directory, set to proper user, and then initialize database:
+Created the directory, set to proper user, and then initialize database.
 
     pgroot="/pathto/pgroot"
     mkdir -p "$pgroot/data"
     sudo chown -R postgres:postgres "$pgroot"
     sudo -u postgres initdb -D "$pgroot/data"
 
-Start the database:
+Start the database.
 
     sudo systemctl daemon-reload
     sudo systemctl start postgresql
 
-Create database and schema:
+Create database and schema.
 
     sudo -u postgres createdb mimic
     psql -d mimic -c "CREATE SCHEMA mimiciii;" postgres
 
 ### Create the Database
 
-Now we can create the database with the MIMIC-III scripts:
+Now we can create the database with the MIMIC-III scripts.
 
     datadir="../../../../mimic-iii/"
     cd datasets/mimic-code/buildmimic/postgres
     make mimic-gz datadir="$datadir"
+
+This likely will take many hours.
 
 ### Process to Get Time-Series Data
 
 You need to run all the processing to get time-series datasets out of the
 database. First, make sure you have all the
 [dependencies](https://github.com/USC-Melady/Benchmarking_DL_MIMICIII) installed.
+
+    sudo pacman -S python-psycopg2 python-numpy python-scipy python-scikit-learn \
+        python-matplotlib python-pandas
+
 Next, tell it how to connect to your database by editing
-`getConnection()` in *datasets/process-mimic-iii/Codes/mimic3_mvcv/utils.py*:
+`getConnection()` in *datasets/process-mimic-iii/Codes/mimic3_mvcv/utils.py*
 
     def getConnection():
         return psycopg2.connect("dbname='mimic' user='postgres' password='postgres'")
 
-Generate some more tables that are used during processing:
+Generate some more tables that are used during processing.
 
     dir="datasets/process-mimic-iii/Codes/mimic3_mvcv/sql_gen_17features_ts/"
     alias psqlf='psql -d mimic postgres -f'

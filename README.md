@@ -18,7 +18,7 @@ and the VRNN with domain adaptation as "VRADA."
  - *--lstm-da* -- use LSTM with adaptation (R-DANN)
  - *--vrnn-da* -- use VRNN with adaptation (VRADA/VADDA)
 
-To try these out, make sure you clone the repository recursively since there's submodules:
+To try these out, make sure you clone the repository recursively since there's submodules.
 
     git clone --recursive https://github.com/floft/vrada
     cd vrada
