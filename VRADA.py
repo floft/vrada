@@ -116,7 +116,7 @@ def train(data_info,
         domain_accuracy = tf.reduce_mean(tf.cast(
             tf.equal(tf.argmax(domain, axis=-1), tf.argmax(domain_classifier, axis=-1)),
         tf.float32))
-    
+
     # Get variables of model - needed if we train in two steps
     variables = tf.trainable_variables()
     rnn_vars = [v for v in variables if 'rnn_model' in v.name]
@@ -220,18 +220,15 @@ def train(data_info,
                     keep_prob: dropout_keep_prob, lr: lr_value, training: True
                 })
 
-                # Update domain more -- makes a big difference
+                # Update domain more
                 #
-                # Note: this is probably more-or-less using a two time-scale learning rate (TTUR)
-                # from the methods to help GANs converge. Appears to help in adversarial domain
-                # adaptation as well.
-                #
-                # Or, maybe it's not TTUR but is the normal for loop in GAN discriminators that
-                # everybody just sets to 1.
+                # Depending on the num_steps, your learning rate, etc. it may be
+                # beneficial to increase the learning rate here to e.g. 10*lr
+                # or 100*lr. This may also depend on your dataset though.
                 sess.run(train_domain, feed_dict={
                     x: combined_x, y: combined_labels, domain: combined_domain,
                     grl_lambda: 0.0,
-                    keep_prob: dropout_keep_prob, lr: 10*lr_value, training: True
+                    keep_prob: dropout_keep_prob, lr: lr_value, training: True
                 })
             else:
                 # Train task classifier on source domain to be correct
@@ -272,7 +269,7 @@ def train(data_info,
                     keep_prob: 1.0, training: False
                 })
                 writer.add_summary(summ, step)
-            
+
             # Extra stuff only log occasionally, e.g. this is weights and larger stuff
             if i%log_extra_save_steps == 0:
                 summ = sess.run(training_summaries_extra_a, feed_dict={
@@ -300,7 +297,7 @@ def train(data_info,
                 pca = np.load(tsne_filename+'_pca_fit.npy')
             else:
                 print("Note: did not find t-SNE weights -- recreating")
-            
+
             np.save(tsne_filename+'_tsne_fit', tsne)
             np.save(tsne_filename+'_pca_fit', pca)
             """
@@ -320,7 +317,7 @@ def train(data_info,
                 title='Domain Adaptation', filename=os.path.join(img_dir, embedding_prefix+"_tsne.png"))
             plot_embedding(pca, combined_labels.argmax(1), combined_domain.argmax(1),
                 title='Domain Adaptation', filename=os.path.join(img_dir, embedding_prefix+"_pca.png"))
-        
+
             # Output time-series "reconstructions" from our generator (if VRNN)
             if extra_model_outputs is not None:
                 # We'll get the decoder's mu and sigma from the evaluation/validation set since
@@ -346,7 +343,7 @@ def last_modified_number(dir_name, glob):
     """
     files = pathlib.Path(dir_name).glob(glob)
     files = sorted(files, key=lambda cp:cp.stat().st_mtime)
-    
+
     if len(files) > 0:
         # Get number from filename
         regex = re.compile(r'\d+')
@@ -355,7 +352,7 @@ def last_modified_number(dir_name, glob):
         last = numbers[0]
 
         return last
-    
+
     return None
 
 if __name__ == '__main__':
@@ -408,7 +405,7 @@ if __name__ == '__main__':
     test_data_a, test_labels_a = load_data("trivial/positive_slope_TEST")
     train_data_b, train_labels_b = load_data("trivial/positive_slope_low_TRAIN")
     test_data_b, test_labels_b = load_data("trivial/positive_slope_low_TEST")
-    
+
     # Noisy - no problem even without adaptation
     # train_data_a, train_labels_a = load_data("trivial/positive_slope_TRAIN")
     # test_data_a, test_labels_a = load_data("trivial/positive_slope_TEST")
@@ -429,7 +426,7 @@ if __name__ == '__main__':
 
     assert args.lstm + args.vrnn + args.lstm_da + args.vrnn_da == 1, \
         "Must specify exactly one method to run"
-    
+
     if args.lstm:
         prefix = "lstm"
         adaptation = False
@@ -446,7 +443,7 @@ if __name__ == '__main__':
         prefix = "vrnn-da"
         adaptation = True
         model_func = build_vrnn
-    
+
     if args.debug:
         attempt = last_modified_number(args.logdir, prefix+"*")
         attempt = attempt+1 if attempt is not None else 1

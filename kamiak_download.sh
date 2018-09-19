@@ -8,6 +8,6 @@ to="$localdir"
 # YOLO backup files and weights, SLURM output files
 rsync -Pahuv \
     --include="$logFolder/" --include="$logFolder/*" \
-    --include="$modelFolder/" --include="$modelFolder/*" \
-    --include="$imgFolder/" --include="$imgFolder/*" \
+    --include="$modelFolder/" --include="$modelFolder/*" --include="$modelFolder/*/*" \
+    --include="$imgFolder/" --include="$imgFolder/*" --include="$imgFolder/*/*" \
     --exclude="*" "$from" "$to"
