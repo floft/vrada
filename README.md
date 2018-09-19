@@ -42,7 +42,9 @@ The original paper used data from the
 for [another paper](https://arxiv.org/abs/1710.08531) that creates various datasets from
 MIMIC-III.
 
-First you have to get access to MIMIC-III, which requires taking an online CITI course.
+First you have to
+[get access to MIMIC-III](https://mimic.physionet.org/gettingstarted/access/),
+which requires taking an online CITI course.
 After you're approved, then you can download MIMIC-III either following
 [their examples](https://github.com/MIT-LCP/mimic-code) or by running
 `datasets/download_mimic_iii.sh` after adding a line with your username and password
