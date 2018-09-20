@@ -1,6 +1,6 @@
 #!/bin/bash
 #
-# Download MIMIC-III (requires login info in .netrc, see ../README.md)
+# Download MIMIC-III (requires login info in .netrc, see README.md)
 #
 # Using aria2c rather than wget allows this to download a lot faster if you
 # have a reasonably-fast Internet connection.

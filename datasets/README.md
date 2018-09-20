@@ -76,8 +76,10 @@ Now we can create the database with the MIMIC-III scripts.
     datadir="../../../../mimic-iii/"
     cd datasets/mimic-code/buildmimic/postgres
     make mimic-gz datadir="$datadir"
+    cd -
 
-This likely will take many hours.
+This likely will take many hours. It took 8 hours on my computer (not an SSD),
+and it'll take up about 60 GiB.
 
 ### Process to Get Time-Series Data
 
@@ -94,44 +96,50 @@ Next, tell it how to connect to your database by editing
     def getConnection():
         return psycopg2.connect("dbname='mimic' user='postgres' password='postgres'")
 
+Run a bunch of notebooks to generate the time-series data. Alternatively if you
+prefer using a GUI rather than the terminal, you can open them as usual with
+`jupyter-notebook`.
+
+    cd datasets/process-mimic-iii/Codes/mimic3_mvcv
+    mkdir -p res admdata
+    alias jnb="jupyter nbconvert --execute --ExecutePreprocessor.timeout=-1 --to notebook"
+
+    jnb "0_createAdmissionList.ipynb"
+    jnb "1_getItemIdList.ipynb"
+    jnb "2_filterItemId_input.ipynb"
+    jnb "3_filterItemId_output.ipynb"
+    jnb "4_filterItemId_chart.ipynb"
+    jnb "5_filterItemId_lab.ipynb"
+    jnb "6_filterItemId_microbio.ipynb"
+    jnb "7_filterItemId_prescript.ipynb"
+    jnb "8_processing.ipynb"
+    jnb "9_collect_mortality_labels.ipynb"
+    jnb "9_getValidDataset.ipynb"
+    jnb "10_get_17-features-processed(fromdb).ipynb"
+    jnb "10_get_17-features-raw.ipynb"
+    jnb "10_get_99plus-features-raw.ipynb"
+
 Generate some more tables that are used during processing.
 
-    dir="datasets/process-mimic-iii/Codes/mimic3_mvcv/sql_gen_17features_ts/"
     alias psqlf='psql -d mimic postgres -f'
 
-    psqlf "$dir/gen_gcs_ts.sql"
-    psqlf "$dir/gen_lab_ts.sql"
-    psqlf "$dir/gen_pao2_fio2.sql"
-    psqlf "$dir/gen_urine_output_ts.sql"
-    psqlf "$dir/gen_vital_ts.sql"
-    psqlf "$dir/gen_17features_first24h.sql"
-    psqlf "$dir/gen_17features_first48h.sql"
+    psqlf "sql_gen_17features_ts/gen_gcs_ts.sql"
+    psqlf "sql_gen_17features_ts/gen_lab_ts.sql"
+    psqlf "sql_gen_17features_ts/gen_pao2_fio2.sql"
+    psqlf "sql_gen_17features_ts/gen_urine_output_ts.sql"
+    psqlf "sql_gen_17features_ts/gen_vital_ts.sql"
+    psqlf "sql_gen_17features_ts/gen_17features_first24h.sql"
+    psqlf "sql_gen_17features_ts/gen_17features_first48h.sql"
 
-Run a bunch of notebooks to generate the time-series data.
+Run a few more notebooks.
 
-    dir="datasets/process-mimic-iii/Codes/mimic3_mvcv"
-    alias jnb="jupyter nbconvert --execute --to notebook --inplace"
-
-    jnb "$dir/0_createAdmissionList.ipynb"
-    jnb "$dir/1_getItemIdList.ipynb"
-    jnb "$dir/2_filterItemId_input.ipynb"
-    jnb "$dir/3_filterItemId_output.ipynb"
-    jnb "$dir/4_filterItemId_chart.ipynb"
-    jnb "$dir/5_filterItemId_lab.ipynb"
-    jnb "$dir/6_filterItemId_microbio.ipynb"
-    jnb "$dir/7_filterItemId_prescript.ipynb"
-    jnb "$dir/8_processing.ipynb"
-    jnb "$dir/9_collect_mortality_labels.ipynb"
-    jnb "$dir/9_getValidDataset.ipynb"
-    jnb "$dir/10_get_17-features-processed(fromdb).ipynb"
-    jnb "$dir/10_get_17-features-raw.ipynb"
-    jnb "$dir/10_get_99plus-features-raw.ipynb"
-    jnb "$dir/11_get_time_series_sample_17-features-processed_24hrs.ipynb"
-    jnb "$dir/11_get_time_series_sample_17-features-processed_48hrs.ipynb"
-    jnb "$dir/11_get_time_series_sample_17-features-raw_24hrs.ipynb"
-    jnb "$dir/11_get_time_series_sample_17-features-raw_48hrs.ipynb"
-    jnb "$dir/11_get_time_series_sample_99plus-features-raw_24hrs.ipynb"
-    jnb "$dir/11_get_time_series_sample_99plus-features-raw_48hrs.ipynb"
+    jnb "11_get_time_series_sample_17-features-processed_24hrs.ipynb"
+    jnb "11_get_time_series_sample_17-features-processed_48hrs.ipynb"
+    jnb "11_get_time_series_sample_17-features-raw_24hrs.ipynb"
+    jnb "11_get_time_series_sample_17-features-raw_48hrs.ipynb"
+    jnb "11_get_time_series_sample_99plus-features-raw_24hrs.ipynb"
+    jnb "11_get_time_series_sample_99plus-features-raw_48hrs.ipynb"
+    cd -
 
 ### Create .tfrecord for TensorFlow
 
