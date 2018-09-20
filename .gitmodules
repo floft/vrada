@@ -1,6 +1,7 @@
 [submodule "datasets/process-mimic-iii"]
 	path = datasets/process-mimic-iii
-	url = https://github.com/USC-Melady/Benchmarking_DL_MIMICIII.git
+	url = https://github.com/floft/Benchmarking_DL_MIMICIII.git
+	ignore = dirty
 [submodule "datasets/mimic-code"]
 	path = datasets/mimic-code
 	url = https://github.com/MIT-LCP/mimic-code.git
