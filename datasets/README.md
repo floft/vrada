@@ -38,8 +38,7 @@ It's approximately 6.6 GiB.
 ### Setting up PostgreSQL
 
 Next, you need to create a PostgreSQL database for the data. Make sure you have
-~100 GiB of free space on your hard drive. Below I'll show you a way how I
-set this up.
+at least 60 GiB of free space on your hard drive.
 
 I'm on Arch, so I installed with
 `sudo pacman -S postgresql`. Then since I don't have enough disk space on my root
@@ -101,7 +100,7 @@ prefer using a GUI rather than the terminal, you can open them as usual with
 `jupyter-notebook`.
 
     cd datasets/process-mimic-iii/Codes/mimic3_mvcv
-    mkdir -p res admdata
+    mkdir -p res
     alias jnb="jupyter nbconvert --execute --ExecutePreprocessor.timeout=-1 --to notebook"
 
     jnb "0_createAdmissionList.ipynb"
@@ -140,6 +139,11 @@ Run a few more notebooks.
     jnb "11_get_time_series_sample_99plus-features-raw_24hrs.ipynb"
     jnb "11_get_time_series_sample_99plus-features-raw_48hrs.ipynb"
     cd -
+
+**Note:** because this process takes so long, I would highly recommend at least
+doing this on an SSD. Though, I copied the PostgreSQL database to a high
+performance cluster into RAM and ran all the processing there. This can be seen
+in the Slurm script *../kamiak_process.srun*
 
 ### Create .tfrecord for TensorFlow
 

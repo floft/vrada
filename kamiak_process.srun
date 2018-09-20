@@ -1,0 +1,138 @@
+#!/bin/bash
+#SBATCH --job-name=MIMIC
+#SBATCH --output=slurm_logs/mimic_%j.out
+#SBATCH --error=slurm_logs/mimic_%j.err
+#SBATCH --ntasks=1
+#SBATCH --cpus-per-task=23
+#SBATCH --nodes=1-1
+#SBATCH --gres=gpu:tesla:0
+#SBATCH --partition=taylor,kamiak,cahnrs_gpu,free_gpu,vcea,cahnrs,cahnrs_bigmem
+#SBATCH --time=7-00:00:00
+#SBATCH --mem=200G
+
+. kamiak_config.sh
+
+#
+# ---
+#
+
+export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
+module load python3/3.5.0
+dbdir="$remotedir/$mimicdir"
+codedir="$remotedir/$mimiccode"
+tmpdir="/dev/shm/mimic_database"
+
+# We'll store the dtabase in RAM
+postgres_pid=""
+
+function clean_up 
+{
+	if [[ ! -z $postgres_pid ]]; then
+        echo "Stopping PostgreSQL"
+		kill $postgres_pid
+    fi
+
+	#echo "Removing database from memory"
+    #rm -rf "$tmpdir"
+    exit
+}
+
+trap 'clean_up' EXIT
+
+if [[ -e "$tmpdir" ]]; then
+    echo "Note: $tmpdir already exists, using previous copy of database"
+else
+    mkdir -p "$tmpdir"
+
+    # This is somewhat sensitive data
+    chmod 0700 "$tmpdir"
+
+    # Get database - skip if we left it there from last run
+    echo "Getting data: started"
+    echo " - database"
+    cp -ra "$dbdir"/* "$tmpdir"
+    echo "Getting data: done"
+fi
+
+# Install dependencies
+echo "Making sure depends are installed: starting"
+pip install --user jupyter matplotlib pandas sklearn scipy psycopg2 numpy
+echo "Making sure depends are installed: done"
+
+# Build PostgreSQL if not already built
+if [[ ! -e "$bindir/postgres" ]]; then
+	cd "$remotedir"
+	mkdir postgres
+
+	module load gcc/7.3.0
+    wget https://ftp.postgresql.org/pub/source/v10.5/postgresql-10.5.tar.gz
+    tar xavf postgresql-10.5.tar.gz
+    cd postgresql-10.5
+    ./configure
+    make
+	make install DESTDIR=$(pwd)/../postgres
+fi
+
+# Start database
+export PATH="$bindir:$PATH"
+export LD_LIBRARY_PATH="$libdir:$LD_LIBRARY_PATH"
+postgres -D "$tmpdir/data" &
+postgres_pid=$!
+
+# Make sure it'll connect to the socket in /tmp
+grep "host='/tmp'" "$codedir/utils.py" >/dev/null || \
+    sed -ri "s#(psycopg2\.connect\(\")(.*)(\"\))#\1\2 host='/tmp'\3#g" "$codedir/utils.py"
+
+# Process
+echo "Processing data: started"
+
+cd "$codedir"
+mkdir -p res
+
+jnb() {
+    jupyter nbconvert --execute --ExecutePreprocessor.timeout=-1 --to notebook "$@"
+}
+psqlf() {
+    # Note /tmp since the Unix socket is stored there when we run postgres
+    # above
+    psql -d mimic postgres -d /tmp -f "$@"
+}
+
+jnb "0_createAdmissionList.ipynb"
+jnb "1_getItemIdList.ipynb"
+jnb "2_filterItemId_input.ipynb"
+jnb "3_filterItemId_output.ipynb"
+jnb "4_filterItemId_chart.ipynb"
+jnb "5_filterItemId_lab.ipynb"
+jnb "6_filterItemId_microbio.ipynb"
+jnb "7_filterItemId_prescript.ipynb"
+jnb "8_processing.ipynb"
+jnb "9_collect_mortality_labels.ipynb"
+jnb "9_getValidDataset.ipynb"
+jnb "10_get_17-features-processed(fromdb).ipynb"
+jnb "10_get_17-features-raw.ipynb"
+jnb "10_get_99plus-features-raw.ipynb"
+
+psqlf "sql_gen_17features_ts/gen_gcs_ts.sql"
+psqlf "sql_gen_17features_ts/gen_lab_ts.sql"
+psqlf "sql_gen_17features_ts/gen_pao2_fio2.sql"
+psqlf "sql_gen_17features_ts/gen_urine_output_ts.sql"
+psqlf "sql_gen_17features_ts/gen_vital_ts.sql"
+psqlf "sql_gen_17features_ts/gen_17features_first24h.sql"
+psqlf "sql_gen_17features_ts/gen_17features_first48h.sql"
+
+jnb "11_get_time_series_sample_17-features-processed_24hrs.ipynb"
+jnb "11_get_time_series_sample_17-features-processed_48hrs.ipynb"
+jnb "11_get_time_series_sample_17-features-raw_24hrs.ipynb"
+jnb "11_get_time_series_sample_17-features-raw_48hrs.ipynb"
+jnb "11_get_time_series_sample_99plus-features-raw_24hrs.ipynb"
+jnb "11_get_time_series_sample_99plus-features-raw_48hrs.ipynb"
+
+echo "Processing data: done"
+
+# Copy data back
+
+# Cleanup
+echo "Deleting workspace: started"
+clean_up
+echo "Deleting workspace: done"
