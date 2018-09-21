@@ -68,23 +68,25 @@ def evaluation_accuracy(sess,
                 next_data_batch_test_b, next_labels_batch_test_b,
             ])
 
-            # For simplicity, don't use the last part of the batch if
-            # we won't have a full batch
-            #
-            # TODO we don't need this if we re-create source_domain and target_domain
-            # to be the proper sizes for the last iteration
+            # If the number of evaluation examples is not divisible by the batch
+            # size, then the last one will not be a full batch. Thus, we'll need
+            # to pass in the proper domain labels with the correct length.
             if eval_data_a.shape[0] != batch_size or eval_data_b.shape[0] != batch_size:
-                break
+                batch_source_domain = domain_labels(0, eval_data_a.shape[0])
+                batch_target_domain = domain_labels(1, eval_data_b.shape[0])
+            else:
+                batch_source_domain = source_domain
+                batch_target_domain = target_domain
 
             # Log summaries run on the evaluation/validation data
             batch_task_a, batch_domain_a = sess.run(
                 [task_accuracy_sum, domain_accuracy_sum], feed_dict={
-                x: eval_data_a, y: eval_labels_a, domain: source_domain,
+                x: eval_data_a, y: eval_labels_a, domain: batch_source_domain,
                 keep_prob: 1.0, training: False
             })
             batch_task_b, batch_domain_b = sess.run(
                 [task_accuracy_sum, domain_accuracy_sum], feed_dict={
-                x: eval_data_b, y: eval_labels_b, domain: target_domain,
+                x: eval_data_b, y: eval_labels_b, domain: batch_target_domain,
                 keep_prob: 1.0, training: False
             })
 
