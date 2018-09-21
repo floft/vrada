@@ -39,6 +39,7 @@ def train(data_info,
         batch_size=128,
         num_steps=100000,
         learning_rate=0.0003,
+        lr_multiplier=1,
         dropout_keep_prob=0.8,
         model_dir="models",
         log_dir="logs",
@@ -229,7 +230,7 @@ def train(data_info,
                 sess.run(train_domain, feed_dict={
                     x: combined_x, y: combined_labels, domain: combined_domain,
                     grl_lambda: 0.0,
-                    keep_prob: dropout_keep_prob, lr: lr_value, training: True
+                    keep_prob: dropout_keep_prob, lr: lr_multiplier*lr_value, training: True
                 })
             else:
                 # Train task classifier on source domain to be correct
@@ -387,6 +388,8 @@ if __name__ == '__main__':
         help="Start new log/model/images rather than continuing from previous run")
     parser.add_argument('--no-debug', dest='debug', action='store_false',
         help="Do not increment model/log/image count each run (default)")
+    parser.add_argument('--lrmult', default=1, type=int,
+        help="Integer multiplier for extra discriminator training learning rate (default 1)")
     parser.set_defaults(
         lstm=False, vrnn=False, lstm_da=False, vrnn_da=False,
         mimic=False, sleep=False, trivial=False,
@@ -473,4 +476,5 @@ if __name__ == '__main__':
             log_dir=log_dir,
             img_dir=args.imgdir,
             embedding_prefix=prefix,
-            adaptation=adaptation)
+            adaptation=adaptation,
+            lr_multiplier=args.lrmult)
