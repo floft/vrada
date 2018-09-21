@@ -3,12 +3,12 @@
 #SBATCH --output=slurm_logs/vrada_%j.out
 #SBATCH --error=slurm_logs/vrada_%j.err
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=4
+#SBATCH --cpus-per-task=1
 #SBATCH --nodes=1-1
 #SBATCH --gres=gpu:tesla:1
-#SBATCH --partition=taylor,kamiak,cahnrs_gpu,free_gpu,vcea,cahnrs,cahnrs_bigmem
+#SBATCH --partition=taylor,cahnrs_gpu,free_gpu,kamiak,vcea,cahnrs,cahnrs_bigmem
 #SBATCH --time=4-00:00:00
-#SBATCH --mem=50G
+#SBATCH --mem=25G
 
 . kamiak_config.sh
 

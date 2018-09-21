@@ -3,9 +3,9 @@
 #
 dir="/data/vcea/matt.taylor/Projects/ras-object-detection/vrada"
 program="VRADA.py"
-modelFolder="vrada-models"
-logFolder="vrada-logs"
-imgFolder="vrada-images"
+modelFolder="vrada-sleep-models"
+logFolder="vrada-sleep-logs"
+imgFolder="vrada-sleep-images"
 #compressedDataset="trivial.zip"
 #dataset=("datasets/trivial")
 compressedDataset="rfsleep.zip"

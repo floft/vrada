@@ -32,6 +32,76 @@ from load_data import IteratorInitializerHook, \
     domain_labels, _get_input_fn, \
     load_data_sleep
 
+def evaluation_accuracy(sess,
+    eval_input_hook_a, eval_input_hook_b,
+    next_data_batch_test_a, next_labels_batch_test_a,
+    next_data_batch_test_b, next_labels_batch_test_b,
+    task_accuracy_sum, domain_accuracy_sum,
+    source_domain, target_domain,
+    x, y, domain, keep_prob, training,
+    batch_size):
+    """
+    Run all the evaluation data to calculate accuracy
+
+    We may not be able to fit all the evaluation data into memory, so we'll
+    loop over it in batches and at the end calculate the accuracy.
+    """
+    # Evaluation set in batches (since it may not fit into memory
+    # all at once)
+    task_a = 0
+    task_b = 0
+    domain_a = 0
+    domain_b = 0
+    a_total = 0
+    b_total = 0
+
+    # Reinitialize the evaluation batch initializers so we start at
+    # the beginning of the evaluation data again
+    eval_input_hook_a.iter_init_func(sess)
+    eval_input_hook_b.iter_init_func(sess)
+
+    while True:
+        try:
+            # Get next evaluation batch
+            eval_data_a, eval_labels_a, eval_data_b, eval_labels_b = sess.run([
+                next_data_batch_test_a, next_labels_batch_test_a,
+                next_data_batch_test_b, next_labels_batch_test_b,
+            ])
+
+            # For simplicity, don't use the last part of the batch if
+            # we won't have a full batch
+            if eval_data_a.shape[0] != batch_size or eval_data_b.shape[0] != batch_size:
+                break
+
+            # Log summaries run on the evaluation/validation data
+            batch_task_a, batch_domain_a = sess.run(
+                [task_accuracy_sum, domain_accuracy_sum], feed_dict={
+                x: eval_data_a, y: eval_labels_a, domain: source_domain,
+                keep_prob: 1.0, training: False
+            })
+            batch_task_b, batch_domain_b = sess.run(
+                [task_accuracy_sum, domain_accuracy_sum], feed_dict={
+                x: eval_data_b, y: eval_labels_b, domain: target_domain,
+                keep_prob: 1.0, training: False
+            })
+
+            task_a += batch_task_a
+            task_b += batch_task_b
+            domain_a += batch_domain_a
+            domain_b += batch_domain_b
+            a_total += eval_data_a.shape[0]
+            b_total += eval_data_b.shape[0]
+        except tf.errors.OutOfRangeError:
+            break
+
+    task_a_accuracy = task_a / a_total
+    domain_a_accuracy = domain_a / a_total
+    task_b_accuracy = task_b / b_total
+    domain_b_accuracy = domain_b / b_total
+
+    return task_a_accuracy, domain_a_accuracy, \
+        task_b_accuracy, domain_b_accuracy
+
 def train(data_info,
         features_a, labels_a, test_features_a, test_labels_a,
         features_b, labels_b, test_features_b, test_labels_b,
@@ -76,11 +146,11 @@ def train(data_info,
     # Load all the test data in one batch (we'll assume test set is small for now)
     with tf.variable_scope("evaluation_data_a"):
         eval_input_fn_a, eval_input_hook_a = _get_input_fn(
-                test_features_a, test_labels_a, test_features_a.shape[0], evaluation=True)
+                test_features_a, test_labels_a, batch_size, evaluation=True)
         next_data_batch_test_a, next_labels_batch_test_a = eval_input_fn_a()
     with tf.variable_scope("evaluation_data_b"):
         eval_input_fn_b, eval_input_hook_b = _get_input_fn(
-                test_features_b, test_labels_b, test_features_b.shape[0], evaluation=True)
+                test_features_b, test_labels_b, batch_size, evaluation=True)
         next_data_batch_test_b, next_labels_batch_test_b = eval_input_fn_b()
 
     # Inputs
@@ -93,13 +163,8 @@ def train(data_info,
     lr = tf.placeholder(tf.float32, (), name='learning_rate')
 
     # Source domain will be [[1,0], [1,0], ...] and target domain [[0,1], [0,1], ...]
-    #
-    # Size of training batch
     source_domain = domain_labels(0, batch_size)
     target_domain = domain_labels(1, batch_size)
-    # Size of evaluation batch - TODO when lots of data, we'll need to batch this
-    eval_source_domain = domain_labels(0, test_features_a.shape[0])
-    eval_target_domain = domain_labels(1, test_features_b.shape[0])
 
     # Model, loss, feature extractor output -- e.g. using build_lstm or build_vrnn
     #
@@ -110,14 +175,22 @@ def train(data_info,
             num_classes, num_features, adaptation)
 
     # Accuracy of the classifiers -- https://stackoverflow.com/a/42608050/2698494
+    #
+    # Note: we also calculate the *sum* (not just the mean), since we need to
+    # run these multiple times if we can't fit the entire validation set into
+    # memory. Then afterwards we can divide by the size of the validation set.
     with tf.variable_scope("task_accuracy"):
-        task_accuracy = tf.reduce_mean(tf.cast(
+        equals = tf.cast(
             tf.equal(tf.argmax(y, axis=-1), tf.argmax(task_classifier, axis=-1)),
-        tf.float32))
+        tf.float32)
+        task_accuracy_sum = tf.reduce_sum(equals)
+        task_accuracy = tf.reduce_mean(equals)
     with tf.variable_scope("domain_accuracy"):
-        domain_accuracy = tf.reduce_mean(tf.cast(
+        equals = tf.cast(
             tf.equal(tf.argmax(domain, axis=-1), tf.argmax(domain_classifier, axis=-1)),
-        tf.float32))
+        tf.float32)
+        domain_accuracy_sum = tf.reduce_sum(equals)
+        domain_accuracy = tf.reduce_mean(equals)
 
     # Get variables of model - needed if we train in two steps
     variables = tf.trainable_variables()
@@ -157,14 +230,6 @@ def train(data_info,
         tf.summary.scalar("accuracy/task/target/training", task_accuracy),
         tf.summary.scalar("accuracy/domain/target/training", domain_accuracy)
     ])
-    evaluation_summaries_a = tf.summary.merge([
-        tf.summary.scalar("accuracy/task/source/validation", task_accuracy),
-        tf.summary.scalar("accuracy/domain/source/validation", domain_accuracy),
-    ])
-    evaluation_summaries_b = tf.summary.merge([
-        tf.summary.scalar("accuracy/task/target/validation", task_accuracy),
-        tf.summary.scalar("accuracy/domain/target/validation", domain_accuracy),
-    ])
 
     # Allow restoring global_step from past run
     global_step = tf.Variable(0, name="global_step", trainable=False)
@@ -179,15 +244,8 @@ def train(data_info,
     # Start training
     with tf.train.SingularMonitoredSession(checkpoint_dir=model_dir, hooks=[
                 input_hook_a, input_hook_b,
-                eval_input_hook_a, eval_input_hook_b,
                 saver_hook
             ]) as sess:
-
-        # Get evaluation batch once
-        eval_data_a, eval_labels_a, eval_data_b, eval_labels_b = sess.run([
-            next_data_batch_test_a, next_labels_batch_test_a,
-            next_data_batch_test_b, next_labels_batch_test_b,
-        ])
 
         for i in range(sess.run(global_step),num_steps+1):
             if i == 0:
@@ -260,25 +318,44 @@ def train(data_info,
                 })
                 writer.add_summary(summ, step)
 
-                # Log summaries run on the evaluation/validation data
-                summ = sess.run(evaluation_summaries_a, feed_dict={
-                    x: eval_data_a, y: eval_labels_a, domain: eval_source_domain,
-                    keep_prob: 1.0, training: False
-                })
-                writer.add_summary(summ, step)
-                summ = sess.run(evaluation_summaries_b, feed_dict={
-                    x: eval_data_b, y: eval_labels_b, domain: eval_target_domain,
-                    keep_prob: 1.0, training: False
-                })
-                writer.add_summary(summ, step)
-
-            # Extra stuff only log occasionally, e.g. this is weights and larger stuff
+            # Larger stuff like weights and evaluation occasionally
             if i%log_extra_save_steps == 0:
                 summ = sess.run(training_summaries_extra_a, feed_dict={
                     x: data_batch_a, y: labels_batch_a, domain: source_domain,
                     keep_prob: 1.0, training: False
                 })
                 writer.add_summary(summ, step)
+
+                task_a_accuracy, domain_a_accuracy, \
+                task_b_accuracy, domain_b_accuracy = evaluation_accuracy(sess,
+                    eval_input_hook_a, eval_input_hook_b,
+                    next_data_batch_test_a, next_labels_batch_test_a,
+                    next_data_batch_test_b, next_labels_batch_test_b,
+                    task_accuracy_sum, domain_accuracy_sum,
+                    source_domain, target_domain,
+                    x, y, domain, keep_prob, training,
+                    batch_size)
+
+                task_source_val = tf.Summary(value=[tf.Summary.Value(
+                    tag="accuracy/task/source/validation",
+                    simple_value=task_a_accuracy
+                )])
+                domain_source_val = tf.Summary(value=[tf.Summary.Value(
+                    tag="accuracy/domain/source/validation",
+                    simple_value=domain_a_accuracy
+                )])
+                task_target_val = tf.Summary(value=[tf.Summary.Value(
+                    tag="accuracy/task/target/validation",
+                    simple_value=task_b_accuracy
+                )])
+                domain_target_val = tf.Summary(value=[tf.Summary.Value(
+                    tag="accuracy/domain/target/validation",
+                    simple_value=domain_b_accuracy
+                )])
+                writer.add_summary(task_source_val, step)
+                writer.add_summary(domain_source_val, step)
+                writer.add_summary(task_target_val, step)
+                writer.add_summary(domain_target_val, step)
 
                 # Make sure we write to disk before too long so we can monitor live in
                 # TensorBoard. If it's too delayed we won't be able to detect problems
@@ -303,10 +380,17 @@ def train(data_info,
             np.save(tsne_filename+'_tsne_fit', tsne)
             np.save(tsne_filename+'_pca_fit', pca)
             """
+            # Get the first batch of evaluation data to use for these plots
+            eval_input_hook_a.iter_init_func(sess)
+            eval_input_hook_b.iter_init_func(sess)
+            eval_data_a, eval_labels_a, eval_data_b, eval_labels_b = sess.run([
+                next_data_batch_test_a, next_labels_batch_test_a,
+                next_data_batch_test_b, next_labels_batch_test_b,
+            ])
 
             combined_x = np.concatenate((eval_data_a, eval_data_b), axis=0)
             combined_labels = np.concatenate((eval_labels_a, eval_labels_b), axis=0)
-            combined_domain = np.concatenate((eval_source_domain, eval_target_domain), axis=0)
+            combined_domain = np.concatenate((source_domain, target_domain), axis=0)
 
             embedding = sess.run(feature_extractor, feed_dict={
                 x: combined_x, keep_prob: 1.0, training: False
