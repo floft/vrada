@@ -480,6 +480,9 @@ if __name__ == '__main__':
         help="Integer multiplier for extra discriminator training learning rate (default 1)")
     parser.add_argument('--debug', dest='debug', action='store_true',
         help="Start new log/model/images rather than continuing from previous run")
+    parser.add_argument('--debugnum', default=-1, type=int,
+        help="Specify exact log/model/images number to use rather than incrementing from last. " \
+            +"(Don't pass both this and --debug at the same time.)")
     parser.set_defaults(
         lstm=False, vrnn=False, lstm_da=False, vrnn_da=False,
         mimic=False, sleep=False, trivial=False,
@@ -546,14 +549,24 @@ if __name__ == '__main__':
         adaptation = True
         model_func = build_vrnn
 
+    # Find last one, increment number
     if args.debug:
         attempt = last_modified_number(args.logdir, prefix+"*")
         attempt = attempt+1 if attempt is not None else 1
-        print("Attempt:", attempt)
+        print("Debugging attempt:", attempt)
 
         prefix += "-"+str(attempt)
         model_dir = os.path.join(args.modeldir, prefix)
         log_dir = os.path.join(args.logdir, prefix)
+    # Use the number specified on the command line
+    elif args.debugnum >= 0:
+        attempt = args.debugnum
+        print("Debugging attempt:", attempt)
+
+        prefix += "-"+str(attempt)
+        model_dir = os.path.join(args.modeldir, prefix)
+        log_dir = os.path.join(args.logdir, prefix)
+    # If no debugging modes, use the model and log directory as-is
     else:
         model_dir = args.modeldir
         log_dir = args.logdir
