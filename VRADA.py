@@ -549,18 +549,18 @@ if __name__ == '__main__':
         adaptation = True
         model_func = build_vrnn
 
-    # Find last one, increment number
-    if args.debug:
-        attempt = last_modified_number(args.logdir, prefix+"*")
-        attempt = attempt+1 if attempt is not None else 1
+    # Use the number specified on the command line (higher precidence than --debug)
+    if args.debugnum >= 0:
+        attempt = args.debugnum
         print("Debugging attempt:", attempt)
 
         prefix += "-"+str(attempt)
         model_dir = os.path.join(args.modeldir, prefix)
         log_dir = os.path.join(args.logdir, prefix)
-    # Use the number specified on the command line
-    elif args.debugnum >= 0:
-        attempt = args.debugnum
+    # Find last one, increment number
+    elif args.debug:
+        attempt = last_modified_number(args.logdir, prefix+"*")
+        attempt = attempt+1 if attempt is not None else 1
         print("Debugging attempt:", attempt)
 
         prefix += "-"+str(attempt)
