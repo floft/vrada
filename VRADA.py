@@ -476,6 +476,8 @@ if __name__ == '__main__':
         help="Run on the trivial synthetic dataset")
     parser.add_argument('--units', default=100, type=int,
         help="Number of LSTM hidden units and VRNN latent variable size (default 100)")
+    parser.add_argument('--batch', default=128, type=int,
+        help="Batch size to use (default 128, decrease if you run out of memory)")
     parser.add_argument('--lrmult', default=1, type=int,
         help="Integer multiplier for extra discriminator training learning rate (default 1)")
     parser.add_argument('--debug', dest='debug', action='store_true',
@@ -581,4 +583,5 @@ if __name__ == '__main__':
             embedding_prefix=prefix,
             adaptation=adaptation,
             lr_multiplier=args.lrmult,
-            units=args.units)
+            units=args.units,
+            batch_size=args.batch)
