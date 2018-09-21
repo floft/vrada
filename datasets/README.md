@@ -1,8 +1,8 @@
 # Datasets
 
 This method uses RNNs, so requires time-series datasets. I started with some
-synthetic datasets and then also used the MIMIC-III dataset that was used in the
-VRADA paper.
+synthetic datasets, tried a RF sleep stage dataset, then also used the MIMIC-III
+dataset that was used in the VRADA paper.
 
 ## Small Synthetic Dataset
 
@@ -12,6 +12,16 @@ These trivial datasets are in the same format as those from
 [UCR Time Series Classification Archive](http://www.cs.ucr.edu/~eamonn/time_series_data/).
 You could also try downloading those UCR datasets and doing adaptation between
 some of them; though, I have not tried this.
+
+## RF Sleep Stage Dataset
+
+There's a paper about
+[learning sleep stages](http://proceedings.mlr.press/v70/zhao17d.html) from
+radio frequency (RF) data. I've also tried out domain adaptation on this dataset.
+Though, their paper is more domain generalization than domain adaptation since
+during training the target data (even unlabeled) is not seen at all. You can
+request access to their dataset on [their website](http://sleep.csail.mit.edu/).
+Then, put the *.npy* files into *datasets/RFSleep*
 
 ## MIMIC-III Health Care Dataset
 

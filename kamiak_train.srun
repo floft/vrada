@@ -16,19 +16,19 @@
 # ---
 #
 
-method=$1
-if [[ -z $method ]]; then
-    echo "Specify which method to use (e.g. --vrnn-da)"
+first_arg=$1
+if [[ -z $first_arg ]]; then
+    echo "Specify what method and dataset to use, e.g. --vrnn-da --trivial"
     exit 1
 else
-    echo "Method: $method"
+    echo "Args: $@"
 fi
 
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 module load cuda/9.0.176 cudnn/7.1.2_cuda9.0 python3/3.5.0
 data="$remotedir"
 
-function clean_up 
+function clean_up
 {
     rmworkspace -a -f --name="$SCRATCHDIR"
     exit
@@ -61,7 +61,7 @@ echo "Making sure TensorFlow installed: done"
 echo "Training network: started"
 mkdir -p "$data/$logFolder/" # log dir, rsync this to view with TensorBoard
 python3 "$program" --logdir "$data/$logFolder" --modeldir "$data/$modelFolder" \
-    --imgdir "$data/$imgFolder" --debug "$method"
+    --imgdir "$data/$imgFolder" --debug "$@"
 echo "Training network: done"
 
 # Cleanup

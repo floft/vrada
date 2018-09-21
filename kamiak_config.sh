@@ -6,8 +6,10 @@ program="VRADA.py"
 modelFolder="vrada-models"
 logFolder="vrada-logs"
 imgFolder="vrada-images"
-compressedDataset="dataset.zip"
-dataset=("trivial")
+#compressedDataset="trivial.zip"
+#dataset=("datasets/trivial")
+compressedDataset="rfsleep.zip"
+dataset=("datasets/RFSleep"/*.npy)
 
 # For processing MIMIC-III dataset - directory for database
 mimicdir="mimic-iii"

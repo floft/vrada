@@ -29,7 +29,8 @@ from plot import plot_embedding, plot_random_time_series
 from model import build_lstm, build_vrnn
 from load_data import IteratorInitializerHook, \
     load_data, one_hot, \
-    domain_labels, _get_input_fn
+    domain_labels, _get_input_fn, \
+    load_data_sleep
 
 def train(data_info,
         features_a, labels_a, test_features_a, test_labels_a,
@@ -370,65 +371,68 @@ if __name__ == '__main__':
         help="Directory for saving image files")
     parser.add_argument('--lstm', dest='lstm', action='store_true',
         help="Run LSTM model")
-    parser.add_argument('--no-lstm', dest='lstm', action='store_false',
-        help="Do not run LSTM model (default)")
     parser.add_argument('--vrnn', dest='vrnn', action='store_true',
         help="Run VRNN model")
-    parser.add_argument('--no-vrnn', dest='vrnn', action='store_false',
-        help="Do not run VRNN model (default)")
     parser.add_argument('--lstm-da', dest='lstm_da', action='store_true',
         help="Run LSTM-DA model")
-    parser.add_argument('--no-lstm-da', dest='lstm_da', action='store_false',
-        help="Do not run LSTM-DA model (default)")
     parser.add_argument('--vrnn-da', dest='vrnn_da', action='store_true',
         help="Run VRNN-DA model")
-    parser.add_argument('--no-vrnn-da', dest='vrnn_da', action='store_false',
-        help="Do not run VRNN-DA model (default)")
+    parser.add_argument('--mimic', dest='mimic', action='store_true',
+        help="Run on the MIMIC-III dataset")
+    parser.add_argument('--sleep', dest='sleep', action='store_true',
+        help="Run on the RF sleep stage dataset")
+    parser.add_argument('--trivial', dest='trivial', action='store_true',
+        help="Run on the trivial synthetic dataset")
     parser.add_argument('--debug', dest='debug', action='store_true',
-        help="Increment model/log/image count each run")
+        help="Start new log/model/images rather than continuing from previous run")
     parser.add_argument('--no-debug', dest='debug', action='store_false',
         help="Do not increment model/log/image count each run (default)")
-    parser.set_defaults(lstm=False, vrnn=False, lstm_da=False, vrnn_da=False, debug=False)
+    parser.set_defaults(
+        lstm=False, vrnn=False, lstm_da=False, vrnn_da=False,
+        mimic=False, sleep=False, trivial=False,
+        debug=False)
     args = parser.parse_args()
 
     # Load datasets - domains A & B
+    assert args.mimic + args.sleep + args.trivial == 1, \
+        "Must specify exactly one dataset to use"
 
-    # Noisy - sine dataset
-    # train_data_a, train_labels_a = load_data("trivial/positive_sine_TRAIN")
-    # test_data_a, test_labels_a = load_data("trivial/positive_sine_TEST")
-    # train_data_b, train_labels_b = load_data("trivial/positive_sine_noise_TRAIN")
-    # test_data_b, test_labels_b = load_data("trivial/positive_sine_noise_TEST")
+    if args.trivial:
+        # Change in y-intercept
+        train_data_a, train_labels_a = load_data("datasets/trivial/positive_slope_TRAIN")
+        test_data_a, test_labels_a = load_data("datasets/trivial/positive_slope_TEST")
+        train_data_b, train_labels_b = load_data("datasets/trivial/positive_slope_low_TRAIN")
+        test_data_b, test_labels_b = load_data("datasets/trivial/positive_slope_low_TEST")
 
-    # Change in y-intercept - sine dataset - doesn't work
-    # train_data_a, train_labels_a = load_data("trivial/positive_sine_TRAIN")
-    # test_data_a, test_labels_a = load_data("trivial/positive_sine_TEST")
-    # train_data_b, train_labels_b = load_data("trivial/positive_sine_low_TRAIN")
-    # test_data_b, test_labels_b = load_data("trivial/positive_sine_low_TEST")
+        # Information about dataset - same for both domains on these datasets
+        index_one = True # Labels start from 1 not 0
+        num_features = 1
+        time_steps = train_data_a.shape[1]
+        num_classes = len(np.unique(train_labels_a))
+        data_info = (time_steps, num_features, num_classes)
+    elif args.sleep:
+        train_data_a, train_labels_a, \
+        test_data_a, test_labels_a, \
+        train_data_b, train_labels_b, \
+        test_data_b, test_labels_b = load_data_sleep("datasets/RFSleep")
 
-    # Change in y-intercept - domain adaptation doesn't work
-    train_data_a, train_labels_a = load_data("trivial/positive_slope_TRAIN")
-    test_data_a, test_labels_a = load_data("trivial/positive_slope_TEST")
-    train_data_b, train_labels_b = load_data("trivial/positive_slope_low_TRAIN")
-    test_data_b, test_labels_b = load_data("trivial/positive_slope_low_TEST")
-
-    # Noisy - no problem even without adaptation
-    # train_data_a, train_labels_a = load_data("trivial/positive_slope_TRAIN")
-    # test_data_a, test_labels_a = load_data("trivial/positive_slope_TEST")
-    # train_data_b, train_labels_b = load_data("trivial/positive_slope_noise_TRAIN")
-    # test_data_b, test_labels_b = load_data("trivial/positive_slope_noise_TEST")
-
-    # Information about dataset - at the moment these are the same for both domains
-    num_features = 1
-    time_steps = train_data_a.shape[1]
-    num_classes = len(np.unique(train_labels_a))
-    data_info = (time_steps, num_features, num_classes)
+        # Information about dataset
+        index_one = False # Labels start from 0
+        num_features = train_data_a.shape[2]
+        time_steps = train_data_a.shape[1]
+        num_classes = len(np.unique(train_labels_a))
+        data_info = (time_steps, num_features, num_classes)
+    elif args.mimic:
+        index_one = False
+        raise NotImplementedError()
 
     # One-hot encoding
-    train_data_a, train_labels_a = one_hot(train_data_a, train_labels_a, num_classes)
-    test_data_a, test_labels_a = one_hot(test_data_a, test_labels_a, num_classes)
-    train_data_b, train_labels_b = one_hot(train_data_b, train_labels_b, num_classes)
-    test_data_b, test_labels_b = one_hot(test_data_b, test_labels_b, num_classes)
+    train_data_a, train_labels_a = one_hot(train_data_a, train_labels_a, num_classes, index_one)
+    test_data_a, test_labels_a = one_hot(test_data_a, test_labels_a, num_classes, index_one)
+    train_data_b, train_labels_b = one_hot(train_data_b, train_labels_b, num_classes, index_one)
+    test_data_b, test_labels_b = one_hot(test_data_b, test_labels_b, num_classes, index_one)
 
+    # Train model using selected dataset and method
     assert args.lstm + args.vrnn + args.lstm_da + args.vrnn_da == 1, \
         "Must specify exactly one method to run"
 
