@@ -1,4 +1,7 @@
 #!/bin/bash
+#
+# Upload files to high performance cluster
+#
 . kamiak_config.sh
 
 # Note both have trailing slashes

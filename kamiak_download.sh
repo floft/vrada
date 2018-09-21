@@ -1,11 +1,14 @@
 #!/bin/bash
+#
+# Download files from high performance cluster
+#
 . kamiak_config.sh
 
 # Note both have trailing slashes
 from="$remotessh:$remotedir"
 to="$localdir"
 
-# YOLO backup files and weights, SLURM output files
+# Logs, models, images
 rsync -Pahuv \
     --include="$logFolder/" --include="$logFolder/*" \
     --include="$modelFolder/" --include="$modelFolder/*" --include="$modelFolder/*/*" \

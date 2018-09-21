@@ -130,8 +130,6 @@ jnb "11_get_time_series_sample_99plus-features-raw_48hrs.ipynb"
 
 echo "Processing data: done"
 
-# Copy data back
-
 # Cleanup
 echo "Deleting workspace: started"
 clean_up

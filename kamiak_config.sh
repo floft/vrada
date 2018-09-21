@@ -1,5 +1,5 @@
 #
-# config file
+# Config file for running on high performance cluster with Slurm
 #
 dir="/data/vcea/matt.taylor/Projects/ras-object-detection/vrada"
 program="VRADA.py"
