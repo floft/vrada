@@ -70,6 +70,9 @@ def evaluation_accuracy(sess,
 
             # For simplicity, don't use the last part of the batch if
             # we won't have a full batch
+            #
+            # TODO we don't need this if we re-create source_domain and target_domain
+            # to be the proper sizes for the last iteration
             if eval_data_a.shape[0] != batch_size or eval_data_b.shape[0] != batch_size:
                 break
 
@@ -111,6 +114,7 @@ def train(data_info,
         learning_rate=0.0003,
         lr_multiplier=1,
         dropout_keep_prob=0.8,
+        units=100,
         model_dir="models",
         log_dir="logs",
         img_dir="images",
@@ -172,7 +176,7 @@ def train(data_info,
     task_classifier, domain_classifier, total_loss, \
     feature_extractor, model_summaries, extra_model_outputs = \
         model_func(x, y, domain, grl_lambda, keep_prob, training,
-            num_classes, num_features, adaptation)
+            num_classes, num_features, adaptation, units)
 
     # Accuracy of the classifiers -- https://stackoverflow.com/a/42608050/2698494
     #
@@ -455,25 +459,25 @@ if __name__ == '__main__':
     parser.add_argument('--imgdir', default="images", type=str,
         help="Directory for saving image files")
     parser.add_argument('--lstm', dest='lstm', action='store_true',
-        help="Run LSTM model")
+        help="Use LSTM model")
     parser.add_argument('--vrnn', dest='vrnn', action='store_true',
-        help="Run VRNN model")
+        help="Use VRNN model")
     parser.add_argument('--lstm-da', dest='lstm_da', action='store_true',
-        help="Run LSTM-DA model")
+        help="Use LSTM-DA model")
     parser.add_argument('--vrnn-da', dest='vrnn_da', action='store_true',
-        help="Run VRNN-DA model")
+        help="Use VRNN-DA model")
     parser.add_argument('--mimic', dest='mimic', action='store_true',
         help="Run on the MIMIC-III dataset")
     parser.add_argument('--sleep', dest='sleep', action='store_true',
         help="Run on the RF sleep stage dataset")
     parser.add_argument('--trivial', dest='trivial', action='store_true',
         help="Run on the trivial synthetic dataset")
-    parser.add_argument('--debug', dest='debug', action='store_true',
-        help="Start new log/model/images rather than continuing from previous run")
-    parser.add_argument('--no-debug', dest='debug', action='store_false',
-        help="Do not increment model/log/image count each run (default)")
+    parser.add_argument('--units', default=100, type=int,
+        help="Number of LSTM hidden units and VRNN latent variable size (default 100)")
     parser.add_argument('--lrmult', default=1, type=int,
         help="Integer multiplier for extra discriminator training learning rate (default 1)")
+    parser.add_argument('--debug', dest='debug', action='store_true',
+        help="Start new log/model/images rather than continuing from previous run")
     parser.set_defaults(
         lstm=False, vrnn=False, lstm_da=False, vrnn_da=False,
         mimic=False, sleep=False, trivial=False,
@@ -561,4 +565,5 @@ if __name__ == '__main__':
             img_dir=args.imgdir,
             embedding_prefix=prefix,
             adaptation=adaptation,
-            lr_multiplier=args.lrmult)
+            lr_multiplier=args.lrmult,
+            units=args.units)

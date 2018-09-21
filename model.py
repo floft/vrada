@@ -61,9 +61,9 @@ def classifier(x, num_classes, keep_prob, training, batch_norm):
             # Last activation is softmax, which we will apply afterwards
             if i != num_layers-1:
                 classifier_output = tf.nn.relu(classifier_output)
-    
+
     softmax_output = tf.nn.softmax(classifier_output)
-    
+
     return classifier_output, softmax_output
 
 def build_model(x, y, domain, grl_lambda, keep_prob, training,
@@ -99,7 +99,7 @@ def build_model(x, y, domain, grl_lambda, keep_prob, training,
                 if batch_norm:
                     feature_extractor = tf.layers.batch_normalization(
                         feature_extractor, training=training)
-                
+
                 feature_extractor = tf.nn.relu(feature_extractor)
 
     # Pass last output to fully connected then softmax to get class prediction
@@ -157,7 +157,7 @@ def build_model(x, y, domain, grl_lambda, keep_prob, training,
     with tf.variable_scope("domain_loss"):
         domain_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(
             labels=tf.stop_gradient(domain), logits=domain_classifier))
-        
+
         if two_domain_classifiers:
             domain_loss += tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(
                 labels=tf.stop_gradient(domain), logits=domain_classifier2))
@@ -175,12 +175,12 @@ def build_model(x, y, domain, grl_lambda, keep_prob, training,
         feature_extractor, summaries
 
 def build_lstm(x, y, domain, grl_lambda, keep_prob, training,
-            num_classes, num_features, adaptation):
+            num_classes, num_features, adaptation, units):
     """ LSTM for a baseline """
     # Build LSTM
     with tf.variable_scope("rnn_model"):
         _, outputs, _, _ = build_rnn(x, keep_prob, [
-            tf.contrib.rnn.BasicLSTMCell(100),
+            tf.contrib.rnn.BasicLSTMCell(units),
             #tf.contrib.rnn.LayerNormBasicLSTMCell(100, dropout_keep_prob=keep_prob),
         ])
 
@@ -206,12 +206,12 @@ def build_lstm(x, y, domain, grl_lambda, keep_prob, training,
         feature_extractor, summaries, extra_outputs
 
 def build_vrnn(x, y, domain, grl_lambda, keep_prob, training,
-            num_classes, num_features, adaptation, eps=1e-9, use_z=True):
+            num_classes, num_features, adaptation, units, eps=1e-9, use_z=True):
     """ VRNN model """
     # Build VRNN
     with tf.variable_scope("rnn_model"):
         _, outputs, _, _ = build_rnn(x, keep_prob, [
-            VRNNCell(num_features, 100, 100, training, batch_norm=False),
+            VRNNCell(num_features, units, units, training, batch_norm=False),
         ])
         # Note: if you try using more than one layer above, then you need to
         # change the loss since for instance if you put an LSTM layer before
@@ -271,7 +271,7 @@ def build_vrnn(x, y, domain, grl_lambda, keep_prob, training,
     # Total loss is sum of all of them
     with tf.variable_scope("total_loss"):
         total_loss = task_loss + tf.reduce_mean(kl_loss) + tf.reduce_mean(likelihood_loss)
-        
+
         if adaptation:
             total_loss += domain_loss
 
