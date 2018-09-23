@@ -78,9 +78,10 @@ def one_hot(x, y, num_classes, index_one=False):
     # Floating point
     x = x.astype(np.float32)
 
-    # If 1D, make it [time_steps, 1]
-    if len(x.shape) < 2:
-        x = x.expand_dims(x, axis=2)
+    # For if we only have one feature,
+    # [batch_size, time_steps] --> [batch_size, time_steps, 1]
+    if len(x.shape) < 3:
+        x = np.expand_dims(x, axis=2)
 
     # One-hot encoded
     if index_one:
