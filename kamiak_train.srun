@@ -24,16 +24,32 @@ else
     echo "Args: $@"
 fi
 
-# Allow overriding the zip file to use as the dataset with the first argument
-# if desired (e.g. --dataset=rfsleep.zip or --dataset=trivial.zip)
-#
-# You can additionally override other settings like --logdir which are passed
-# directly to the Python program.
-if [[ $(cut -d'=' -f1 <<< "$first_arg") == "--dataset" ]];
-    compressedDataset="$(cut -d'=' -f2 <<< "$first_arg")"
-    echo "Overriding dataset to be: $compressedDataset"
+# Allow overriding the dataset zip file with --dataset=... or additionally
+# the --logdir=..., --modeldir=..., and --imgdir=... Any other args (e.g.
+# --vrada-da) are passed directly to the Python program.
+program_args=()
+for i; do
+    name="$(cut -d'=' -f1 <<< "$i")"
+    value="$(cut -d'=' -f2 <<< "$i")"
+
+    if [[ "$name" == "--dataset" ]]; then
+        compressedDataset="$value"
+        echo "Overriding dataset to be: $compressedDataset"
+    elif [[ "$name" == "--logdir" ]]; then
+        logFolder="$value"
+        echo "Overriding logdir to be: $logFolder"
+    elif [[ "$name" == "--modeldir" ]]; then
+        modelFolder="$value"
+        echo "Overriding modeldir to be: $modelFolder"
+    elif [[ "$name" == "--imgdir" ]]; then
+        imgFolder="$value"
+        echo "Overriding imgdir to be: $imgFolder"
+    else
+        program_args+=("$i")
+    fi
+
     shift
-fi
+done
 
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 module load cuda/9.0.176 cudnn/7.1.2_cuda9.0 python3/3.5.0
@@ -72,7 +88,7 @@ echo "Making sure TensorFlow installed: done"
 echo "Training network: started"
 mkdir -p "$data/$logFolder/" # log dir, rsync this to view with TensorBoard
 python3 "$program" --logdir "$data/$logFolder" --modeldir "$data/$modelFolder" \
-    --imgdir "$data/$imgFolder" --debug "$@"
+    --imgdir "$data/$imgFolder" --debug "${program_args[@]}"
 echo "Training network: done"
 
 # Cleanup
