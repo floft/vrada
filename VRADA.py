@@ -472,35 +472,50 @@ if __name__ == '__main__':
         help="Run on the MIMIC-III dataset")
     parser.add_argument('--sleep', dest='sleep', action='store_true',
         help="Run on the RF sleep stage dataset")
-    parser.add_argument('--trivial', dest='trivial', action='store_true',
-        help="Run on the trivial synthetic dataset")
+    parser.add_argument('--trivial-line', dest='trivial_line', action='store_true',
+        help="Run on the trivial synthetic line dataset")
+    parser.add_argument('--trivial-sine', dest='trivial_sine', action='store_true',
+        help="Run on the trivial synthetic sine dataset")
     parser.add_argument('--units', default=100, type=int,
         help="Number of LSTM hidden units and VRNN latent variable size (default 100)")
     parser.add_argument('--batch', default=128, type=int,
         help="Batch size to use (default 128, decrease if you run out of memory)")
-    parser.add_argument('--lrmult', default=1, type=int,
+    parser.add_argument('--lr-mult', default=1, type=int,
         help="Integer multiplier for extra discriminator training learning rate (default 1)")
     parser.add_argument('--debug', dest='debug', action='store_true',
         help="Start new log/model/images rather than continuing from previous run")
-    parser.add_argument('--debugnum', default=-1, type=int,
+    parser.add_argument('--debug-num', default=-1, type=int,
         help="Specify exact log/model/images number to use rather than incrementing from last. " \
             +"(Don't pass both this and --debug at the same time.)")
     parser.set_defaults(
         lstm=False, vrnn=False, lstm_da=False, vrnn_da=False,
-        mimic=False, sleep=False, trivial=False,
+        mimic=False, sleep=False, trivial_line=False, trivial_sine=False,
         debug=False)
     args = parser.parse_args()
 
     # Load datasets - domains A & B
-    assert args.mimic + args.sleep + args.trivial == 1, \
+    assert args.mimic + args.sleep + args.trivial_line + args.trivial_sine == 1, \
         "Must specify exactly one dataset to use"
 
-    if args.trivial:
+    if args.trivial_line:
         # Change in y-intercept
         train_data_a, train_labels_a = load_data("datasets/trivial/positive_slope_TRAIN")
         test_data_a, test_labels_a = load_data("datasets/trivial/positive_slope_TEST")
         train_data_b, train_labels_b = load_data("datasets/trivial/positive_slope_low_TRAIN")
         test_data_b, test_labels_b = load_data("datasets/trivial/positive_slope_low_TEST")
+
+        # Information about dataset - same for both domains on these datasets
+        index_one = True # Labels start from 1 not 0
+        num_features = 1
+        time_steps = train_data_a.shape[1]
+        num_classes = len(np.unique(train_labels_a))
+        data_info = (time_steps, num_features, num_classes)
+    elif args.trivial_sine:
+        # Change in y-intercept
+        train_data_a, train_labels_a = load_data("datasets/trivial/positive_sine_TRAIN")
+        test_data_a, test_labels_a = load_data("datasets/trivial/positive_sine_TEST")
+        train_data_b, train_labels_b = load_data("datasets/trivial/positive_sine_low_TRAIN")
+        test_data_b, test_labels_b = load_data("datasets/trivial/positive_sine_low_TEST")
 
         # Information about dataset - same for both domains on these datasets
         index_one = True # Labels start from 1 not 0
@@ -552,8 +567,8 @@ if __name__ == '__main__':
         model_func = build_vrnn
 
     # Use the number specified on the command line (higher precidence than --debug)
-    if args.debugnum >= 0:
-        attempt = args.debugnum
+    if args.debug_num >= 0:
+        attempt = args.debug_num
         print("Debugging attempt:", attempt)
 
         prefix += "-"+str(attempt)
@@ -582,6 +597,6 @@ if __name__ == '__main__':
             img_dir=args.imgdir,
             embedding_prefix=prefix,
             adaptation=adaptation,
-            lr_multiplier=args.lrmult,
+            lr_multiplier=args.lr_mult,
             units=args.units,
             batch_size=args.batch)
