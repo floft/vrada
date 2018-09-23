@@ -4,19 +4,16 @@ import matplotlib.pyplot as plt
 def plot_embedding(x, y, d, title=None, filename=None):
     """
     Plot an embedding X with the class label y colored by the domain d.
-    
+
     From: https://github.com/pumpikano/tf-dann/blob/master/utils.py
     """
     x_min, x_max = np.min(x, 0), np.max(x, 0)
     x = (x - x_min) / (x_max - x_min)
 
-    #colors = ["xkcd:orange", "xkcd:teal", "xkcd:darkgreen", "xkcd:orchid", "xkcd:blue", "xkcd:indigo"]
-
+    # XKCD colors: https://matplotlib.org/users/colors.html
     colors = {
-        (0, 0): 'xkcd:orange', # source 0
-        (0, 1): 'xkcd:teal', # source 1
-        (1, 0): 'xkcd:darkgreen', # target 0
-        (1, 1): 'xkcd:indigo', # target 1
+        0: 'xkcd:orange', # source
+        1: 'xkcd:darkgreen', # target
     }
 
     domain = {
@@ -30,7 +27,7 @@ def plot_embedding(x, y, d, title=None, filename=None):
     for i in range(x.shape[0]):
         # plot colored number
         plt.text(x[i, 0], x[i, 1], domain[d[i]]+str(y[i]),
-                 color=colors[(d[i], y[i])],
+                 color=colors[d[i]],
                  fontdict={'weight': 'bold', 'size': 9})
 
     plt.xticks([]), plt.yticks([])
@@ -54,7 +51,7 @@ def plot_random_time_series(mu, sigma, num_samples=5, title=None, filename=None)
         title, filename -- optional
     Output:
         plot of sample time-series
-    
+
     Note: at the moment we're assuming num_features=1 (plot will be 2D)
     """
     mu = np.squeeze(mu)
