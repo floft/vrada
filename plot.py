@@ -1,3 +1,4 @@
+import io
 import numpy as np
 import matplotlib.pyplot as plt
 
@@ -38,6 +39,13 @@ def plot_embedding(x, y, d, title=None, filename=None):
     if filename is not None:
         plt.savefig(filename, bbox_inches='tight', pad_inches=0, transparent=True)
 
+    # Save to buffer for sending to TensorBoard
+    # See: https://stackoverflow.com/a/38676842/2698494
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png',
+        bbox_inches='tight', pad_inches=0, transparent=True)
+    buf.seek(0)
+    return buf.getvalue()
 
 def plot_random_time_series(mu, sigma, num_samples=5, title=None, filename=None):
     """
@@ -78,3 +86,11 @@ def plot_random_time_series(mu, sigma, num_samples=5, title=None, filename=None)
 
     if filename is not None:
         plt.savefig(filename, bbox_inches='tight', pad_inches=0, transparent=True)
+
+    # Save to buffer for sending to TensorBoard
+    # See: https://stackoverflow.com/a/38676842/2698494
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png',
+        bbox_inches='tight', pad_inches=0, transparent=True)
+    buf.seek(0)
+    return buf.getvalue()

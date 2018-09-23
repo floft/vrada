@@ -16,13 +16,9 @@ from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
 #from tensorflow.contrib.tensorboard.plugins import projector
 
-# Due to this being run on Kamiak, that doesn't have _tkinter, we have to set a
-# different backend otherwise it'll error
-# https://stackoverflow.com/a/40931739/2698494
+# Make sure matplotlib is not interactive
 import matplotlib as mpl
-if os.environ.get('DISPLAY','') == '':
-    print('no display found. Using non-interactive Agg backend')
-    mpl.use('Agg')
+mpl.use('Agg')
 import matplotlib.pyplot as plt
 
 from plot import plot_embedding, plot_random_time_series
@@ -106,6 +102,80 @@ def evaluation_accuracy(sess,
 
     return task_a_accuracy, domain_a_accuracy, \
         task_b_accuracy, domain_b_accuracy
+
+def evaluation_plots(sess,
+    eval_input_hook_a, eval_input_hook_b,
+    next_data_batch_test_a, next_labels_batch_test_a,
+    next_data_batch_test_b, next_labels_batch_test_b,
+    source_domain, target_domain,
+    feature_extractor, x, keep_prob, training, adaptation,
+    extra_model_outputs=None,
+    tsne_filename=None,
+    pca_filename=None,
+    recon_a_filename=None,
+    recon_b_filename=None):
+    """
+    Run the first batch of evaluation data through the feature extractor, then
+    generate and return the PCA and t-SNE plots. Optionally, save these to a file
+    as well.
+    """
+    eval_input_hook_a.iter_init_func(sess)
+    eval_input_hook_b.iter_init_func(sess)
+    eval_data_a, eval_labels_a, eval_data_b, eval_labels_b = sess.run([
+        next_data_batch_test_a, next_labels_batch_test_a,
+        next_data_batch_test_b, next_labels_batch_test_b,
+    ])
+
+    combined_x = np.concatenate((eval_data_a, eval_data_b), axis=0)
+    combined_labels = np.concatenate((eval_labels_a, eval_labels_b), axis=0)
+    combined_domain = np.concatenate((source_domain, target_domain), axis=0)
+
+    embedding = sess.run(feature_extractor, feed_dict={
+        x: combined_x, keep_prob: 1.0, training: False
+    })
+
+    tsne = TSNE(n_components=2, init='pca', n_iter=3000).fit_transform(embedding)
+    pca = PCA(n_components=2).fit_transform(embedding)
+
+    if adaptation:
+        title = "Domain Adaptation"
+    else:
+        title = "No Adaptation"
+
+    tsne_plot = plot_embedding(
+        tsne, combined_labels.argmax(1), combined_domain.argmax(1),
+        title=title + " - t-SNE", filename=tsne_filename)
+    pca_plot = plot_embedding(pca, combined_labels.argmax(1), combined_domain.argmax(1),
+        title=title + " - PCA", filename=pca_filename)
+
+    plots = []
+    plots.append(('adaptation/tsne', tsne_plot))
+    plots.append(('adaptation/pca', pca_plot))
+
+    # Output time-series "reconstructions" from our generator (if VRNN)
+    if extra_model_outputs is not None:
+        # We'll get the decoder's mu and sigma from the evaluation/validation set since
+        # it's much larger than the training batches
+        mu, sigma = sess.run(extra_model_outputs, feed_dict={
+            x: eval_data_a, keep_prob: 1.0, training: False
+        })
+
+        recon_a_plot = plot_random_time_series(
+            mu, sigma, title='VRNN Samples (source domain)',
+            filename=recon_a_filename)
+
+        mu, sigma = sess.run(extra_model_outputs, feed_dict={
+            x: eval_data_b, keep_prob: 1.0, training: False
+        })
+
+        recon_b_plot = plot_random_time_series(
+            mu, sigma, title='VRNN Samples (target domain)',
+            filename=recon_b_filename)
+
+        plots.append(('reconstruction/a', recon_a_plot))
+        plots.append(('reconstruction/b', recon_b_plot))
+
+    return plots
 
 def train(data_info,
         features_a, labels_a, test_features_a, test_labels_a,
@@ -363,6 +433,21 @@ def train(data_info,
                 writer.add_summary(task_target_val, step)
                 writer.add_summary(domain_target_val, step)
 
+                plots = evaluation_plots(sess,
+                    eval_input_hook_a, eval_input_hook_b,
+                    next_data_batch_test_a, next_labels_batch_test_a,
+                    next_data_batch_test_b, next_labels_batch_test_b,
+                    source_domain, target_domain,
+                    feature_extractor, x, keep_prob, training, adaptation,
+                    extra_model_outputs)
+
+                for name, buf in plots:
+                    # See: https://gist.github.com/gyglim/1f8dfb1b5c82627ae3efcfbbadb9f514
+                    plot = tf.Summary.Image(encoded_image_string=buf)
+                    summ = tf.Summary(value=[tf.Summary.Value(
+                        tag=name, image=plot)])
+                    writer.add_summary(summ, step)
+
                 # Make sure we write to disk before too long so we can monitor live in
                 # TensorBoard. If it's too delayed we won't be able to detect problems
                 # for a long time.
@@ -387,51 +472,17 @@ def train(data_info,
             np.save(tsne_filename+'_pca_fit', pca)
             """
             # Get the first batch of evaluation data to use for these plots
-            eval_input_hook_a.iter_init_func(sess)
-            eval_input_hook_b.iter_init_func(sess)
-            eval_data_a, eval_labels_a, eval_data_b, eval_labels_b = sess.run([
+            evaluation_plots(sess,
+                eval_input_hook_a, eval_input_hook_b,
                 next_data_batch_test_a, next_labels_batch_test_a,
                 next_data_batch_test_b, next_labels_batch_test_b,
-            ])
-
-            combined_x = np.concatenate((eval_data_a, eval_data_b), axis=0)
-            combined_labels = np.concatenate((eval_labels_a, eval_labels_b), axis=0)
-            combined_domain = np.concatenate((source_domain, target_domain), axis=0)
-
-            embedding = sess.run(feature_extractor, feed_dict={
-                x: combined_x, keep_prob: 1.0, training: False
-            })
-
-            tsne = TSNE(n_components=2, init='pca', n_iter=3000).fit_transform(embedding)
-            pca = PCA(n_components=2).fit_transform(embedding)
-
-            if adaptation:
-                title = "Domain Adaptation"
-            else:
-                title = "No Adaptation"
-
-            plot_embedding(tsne, combined_labels.argmax(1), combined_domain.argmax(1),
-                title=title + " - t-SNE", filename=os.path.join(img_dir, embedding_prefix+"_tsne.png"))
-            plot_embedding(pca, combined_labels.argmax(1), combined_domain.argmax(1),
-                title=title + " - PCA", filename=os.path.join(img_dir, embedding_prefix+"_pca.png"))
-
-            # Output time-series "reconstructions" from our generator (if VRNN)
-            if extra_model_outputs is not None:
-                # We'll get the decoder's mu and sigma from the evaluation/validation set since
-                # it's much larger than the training batches
-                mu, sigma = sess.run(extra_model_outputs, feed_dict={
-                    x: eval_data_a, keep_prob: 1.0, training: False
-                })
-
-                plot_random_time_series(mu, sigma, title='VRNN Samples (source domain)',
-                    filename=os.path.join(img_dir, embedding_prefix+"_reconstruction_a.png"))
-
-                mu, sigma = sess.run(extra_model_outputs, feed_dict={
-                    x: eval_data_b, keep_prob: 1.0, training: False
-                })
-
-                plot_random_time_series(mu, sigma, title='VRNN Samples (target domain)',
-                    filename=os.path.join(img_dir, embedding_prefix+"_reconstruction_b.png"))
+                source_domain, target_domain,
+                feature_extractor, x, keep_prob, training, adaptation,
+                extra_model_outputs,
+                tsne_filename=os.path.join(img_dir, embedding_prefix+"_tsne.png"),
+                pca_filename=os.path.join(img_dir, embedding_prefix+"_pca.png"),
+                recon_a_filename=os.path.join(img_dir, embedding_prefix+"_reconstruction_a.png"),
+                recon_b_filename=os.path.join(img_dir, embedding_prefix+"_reconstruction_b.png"))
 
 def last_modified_number(dir_name, glob):
     """
