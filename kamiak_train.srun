@@ -24,6 +24,17 @@ else
     echo "Args: $@"
 fi
 
+# Allow overriding the zip file to use as the dataset with the first argument
+# if desired (e.g. --dataset=rfsleep.zip or --dataset=trivial.zip)
+#
+# You can additionally override other settings like --logdir which are passed
+# directly to the Python program.
+if [[ $(cut -d'=' -f1 <<< "$first_arg") == "--dataset" ]];
+    compressedDataset="$(cut -d'=' -f2 <<< "$first_arg")"
+    echo "Overriding dataset to be: $compressedDataset"
+    shift
+fi
+
 export OMP_NUM_THREADS=$SLURM_CPUS_PER_TASK
 module load cuda/9.0.176 cudnn/7.1.2_cuda9.0 python3/3.5.0
 data="$remotedir"
