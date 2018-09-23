@@ -1,5 +1,7 @@
 # Variational Recurrent Adversarial Deep Domain Adaptation (VRADA)
 
+**Warning:** this code is still in development and not fully functional.
+
 Implementation of VRADA in TensorFlow. See
 [their paper](https://openreview.net/pdf?id=rk9eAFcxg) or
 [blog post](https://wcarvalho.github.io/research/2017/04/23/vrada/) for details
