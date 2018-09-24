@@ -63,3 +63,7 @@ Then on your local computer to monitor the progress in TensorBoard:
 
     ./kamiak_tflogs.sh
     tensorboard --logdir vrada-logs
+
+If you want to see images at more than 10 time steps:
+
+    tensorboard --logdir vrada-logs --samples_per_plugin images=100
