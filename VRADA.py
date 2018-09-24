@@ -477,26 +477,54 @@ if __name__ == '__main__':
         help="Directory for saving log files")
     parser.add_argument('--lstm', dest='lstm', action='store_true',
         help="Use LSTM model")
+    parser.add_argument('--no-lstm', dest='lstm', action='store_false',
+        help="Do not LSTM model (default)")
     parser.add_argument('--vrnn', dest='vrnn', action='store_true',
         help="Use VRNN model")
+    parser.add_argument('--no-vrnn', dest='vrnn', action='store_false',
+        help="Do not use VRNN model (default)")
     parser.add_argument('--lstm-da', dest='lstm_da', action='store_true',
         help="Use LSTM-DA model")
+    parser.add_argument('--no-lstm-da', dest='lstm_da', action='store_false',
+        help="Do not use LSTM-DA model (default)")
     parser.add_argument('--vrnn-da', dest='vrnn_da', action='store_true',
         help="Use VRNN-DA model")
+    parser.add_argument('--no-vrnn-da', dest='vrnn_da', action='store_false',
+        help="Do not use VRNN-DA model (default)")
     parser.add_argument('--mimic', dest='mimic', action='store_true',
         help="Run on the MIMIC-III dataset")
+    parser.add_argument('--no-mimic', dest='mimic', action='store_false',
+        help="Do not run on the MIMIC-III dataset (default)")
     parser.add_argument('--sleep', dest='sleep', action='store_true',
         help="Run on the RF sleep stage dataset")
+    parser.add_argument('--no-sleep', dest='sleep', action='store_false',
+        help="Do not run on the RF sleep stage dataset (default)")
     parser.add_argument('--trivial-line', dest='trivial_line', action='store_true',
         help="Run on the trivial synthetic line dataset")
+    parser.add_argument('--no-trivial-line', dest='trivial_line', action='store_false',
+        help="Do not run on the trivial synthetic line dataset (default)")
     parser.add_argument('--trivial-sine', dest='trivial_sine', action='store_true',
         help="Run on the trivial synthetic sine dataset")
+    parser.add_argument('--no-trivial-sine', dest='trivial_sine', action='store_false',
+        help="Do not run on the trivial synthetic sine dataset (default)")
     parser.add_argument('--units', default=100, type=int,
         help="Number of LSTM hidden units and VRNN latent variable size (default 100)")
+    parser.add_argument('--steps', default=100000, type=int,
+        help="Number of training steps to run (default 100000)")
     parser.add_argument('--batch', default=128, type=int,
         help="Batch size to use (default 128, decrease if you run out of memory)")
-    parser.add_argument('--lr-mult', default=1, type=int,
-        help="Integer multiplier for extra discriminator training learning rate (default 1)")
+    parser.add_argument('--lr', default=0.0003, type=float,
+        help="Learning rate for training (default 0.0003)")
+    parser.add_argument('--lr-mult', default=1.0, type=float,
+        help="Multiplier for extra discriminator training learning rate (default 1)")
+    parser.add_argument('--dropout', default=0.8, type=float,
+        help="Keep probability for dropout (default 0.8)")
+    parser.add_argument('--model-steps', default=1000, type=int,
+        help="Save the model every so many steps (default 1000)")
+    parser.add_argument('--log-steps', default=50, type=int,
+        help="Log training losses and accuracy every so many steps (default 50)")
+    parser.add_argument('--log-steps-slow', default=250, type=int,
+        help="Log evaluation accuracy, weights, plots, etc. every so many steps (default 250)")
     parser.add_argument('--debug', dest='debug', action='store_true',
         help="Start new log/model/images rather than continuing from previous run")
     parser.add_argument('--debug-num', default=-1, type=int,
@@ -610,6 +638,12 @@ if __name__ == '__main__':
             model_dir=model_dir,
             log_dir=log_dir,
             adaptation=adaptation,
+            num_steps=args.steps,
+            learning_rate=args.lr,
             lr_multiplier=args.lr_mult,
             units=args.units,
-            batch_size=args.batch)
+            batch_size=args.batch,
+            dropout_keep_prob=args.dropout,
+            model_save_steps=args.model_steps,
+            log_save_steps=args.log_steps,
+            log_extra_save_steps=args.log_steps_slow)
