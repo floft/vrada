@@ -17,6 +17,5 @@ while true; do
     #   never update without restarting TensorBoard
 
     rsync -Pahuv --inplace --exclude="model.ckpt*" "$from/${logFolder}/" "$to/${logFolder}/"
-    rsync -Pahuv --inplace "$from/${imgFolder}/" "$to/${imgFolder}/"
     sleep 30
 done

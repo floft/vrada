@@ -41,9 +41,6 @@ for i; do
     elif [[ "$name" == "--modeldir" ]]; then
         modelFolder="$value"
         echo "Overriding modeldir to be: $modelFolder"
-    elif [[ "$name" == "--imgdir" ]]; then
-        imgFolder="$value"
-        echo "Overriding imgdir to be: $imgFolder"
     else
         program_args+=("$i")
     fi
@@ -88,7 +85,7 @@ echo "Making sure TensorFlow installed: done"
 echo "Training network: started"
 mkdir -p "$data/$logFolder/" # log dir, rsync this to view with TensorBoard
 python3 "$program" --logdir "$data/$logFolder" --modeldir "$data/$modelFolder" \
-    --imgdir "$data/$imgFolder" --debug "${program_args[@]}"
+    --debug "${program_args[@]}"
 echo "Training network: done"
 
 # Cleanup

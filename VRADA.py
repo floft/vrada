@@ -194,8 +194,6 @@ def train(data_info,
         units=100,
         model_dir="models",
         log_dir="logs",
-        img_dir="images",
-        embedding_prefix=None,
         model_save_steps=1000,
         log_save_steps=50,
         log_extra_save_steps=250,
@@ -205,8 +203,6 @@ def train(data_info,
         os.makedirs(model_dir)
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
-    if not os.path.exists(img_dir):
-        os.makedirs(img_dir)
 
     # Data stats
     time_steps, num_features, num_classes = data_info
@@ -290,15 +286,6 @@ def train(data_info,
         if adaptation:
             train_domain = optimizer.minimize(total_loss,
                 var_list=domain_classifier_vars)
-
-    # For making sure batch norm is working -- moving averages
-    # global_variables = tf.global_variables()
-    # moving_batch_vars = [v for v in global_variables if 'moving_' in v.name]
-
-    # for v in moving_batch_vars:
-    #     model_summaries.append(
-    #         tf.summary.histogram(v.name.replace(":0",""), v)
-    #     )
 
     # Summaries - training and evaluation for both domains A and B
     training_summaries_a = tf.summary.merge([
@@ -401,12 +388,14 @@ def train(data_info,
 
             # Larger stuff like weights and evaluation occasionally
             if i%log_extra_save_steps == 0:
+                # Training weights
                 summ = sess.run(training_summaries_extra_a, feed_dict={
                     x: data_batch_a, y: labels_batch_a, domain: source_domain,
                     keep_prob: 1.0, training: False
                 })
                 writer.add_summary(summ, step)
 
+                # Evaluation accuracy
                 task_a_accuracy, domain_a_accuracy, \
                 task_b_accuracy, domain_b_accuracy = evaluation_accuracy(sess,
                     eval_input_hook_a, eval_input_hook_b,
@@ -438,6 +427,7 @@ def train(data_info,
                 writer.add_summary(task_target_val, step)
                 writer.add_summary(domain_target_val, step)
 
+                # t-SNE, PCA, and VRNN reconstruction plots
                 plots = evaluation_plots(sess,
                     eval_input_hook_a, eval_input_hook_b,
                     next_data_batch_test_a, next_labels_batch_test_a,
@@ -459,37 +449,6 @@ def train(data_info,
                 writer.flush()
 
         writer.flush()
-
-        # Output t-SNE after we've trained everything on the evaluation data
-        #
-        # Maybe in the future it would be cool to use TensorFlow's projector in TensorBoard
-        # https://medium.com/@vegi/visualizing-higher-dimensional-data-using-t-sne-on-tensorboard-7dbf22682cf2
-        #
-        # Note: the output reconstruction images if using VRNN will be the last
-        # feature since at the moment it won't change the filename for each feature.
-        if embedding_prefix is not None:
-            """
-            if os.path.exists(tsne_filename+'_tsne_fit.npy'):
-                print("Note: generating t-SNE plot using using pre-existing embedding")
-                tsne = np.load(tsne_filename+'_tsne_fit.npy')
-                pca = np.load(tsne_filename+'_pca_fit.npy')
-            else:
-                print("Note: did not find t-SNE weights -- recreating")
-
-            np.save(tsne_filename+'_tsne_fit', tsne)
-            np.save(tsne_filename+'_pca_fit', pca)
-            """
-            evaluation_plots(sess,
-                eval_input_hook_a, eval_input_hook_b,
-                next_data_batch_test_a, next_labels_batch_test_a,
-                next_data_batch_test_b, next_labels_batch_test_b,
-                source_domain, target_domain,
-                feature_extractor, x, keep_prob, training, adaptation,
-                extra_model_outputs, num_features,
-                tsne_filename=os.path.join(img_dir, embedding_prefix+"_tsne.png"),
-                pca_filename=os.path.join(img_dir, embedding_prefix+"_pca.png"),
-                recon_a_filename=os.path.join(img_dir, embedding_prefix+"_reconstruction_a.png"),
-                recon_b_filename=os.path.join(img_dir, embedding_prefix+"_reconstruction_b.png"))
 
 def last_modified_number(dir_name, glob):
     """
@@ -516,8 +475,6 @@ if __name__ == '__main__':
         help="Directory for saving model files")
     parser.add_argument('--logdir', default="logs", type=str,
         help="Directory for saving log files")
-    parser.add_argument('--imgdir', default="images", type=str,
-        help="Directory for saving image files")
     parser.add_argument('--lstm', dest='lstm', action='store_true',
         help="Use LSTM model")
     parser.add_argument('--vrnn', dest='vrnn', action='store_true',
@@ -652,8 +609,6 @@ if __name__ == '__main__':
             model_func=model_func,
             model_dir=model_dir,
             log_dir=log_dir,
-            img_dir=args.imgdir,
-            embedding_prefix=prefix,
             adaptation=adaptation,
             lr_multiplier=args.lr_mult,
             units=args.units,

@@ -44,7 +44,7 @@ used. You can select which dataset to use with a command-line argument:
 For example, to run domain adaption locally using a VRNN on the synthetically
 generated "trivial" dataset:
 
-    python3 VRADA.py --logdir logs --modeldir models --imgdir images --debug --vrnn-da --trivial-line
+    python3 VRADA.py --logdir logs --modeldir models --debug --vrnn-da --trivial-line
 
 Note the "--debug" flag tells it to start a new log and model directory
 (incrementing the folder number each time) for each run rather than continuing
