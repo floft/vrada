@@ -119,6 +119,7 @@ def evaluation_plots(sess,
     generate and return the PCA and t-SNE plots. Optionally, save these to a file
     as well.
     """
+    # Get the first batch of evaluation data to use for these plots
     eval_input_hook_a.iter_init_func(sess)
     eval_input_hook_b.iter_init_func(sess)
     eval_data_a, eval_labels_a, eval_data_b, eval_labels_b = sess.run([
@@ -149,32 +150,35 @@ def evaluation_plots(sess,
         title=title + " - PCA", filename=pca_filename)
 
     plots = []
-    plots.append(('adaptation/tsne', tsne_plot))
-    plots.append(('adaptation/pca', pca_plot))
+    plots.append(('tsne', tsne_plot))
+    plots.append(('pca', pca_plot))
 
     # Output time-series "reconstructions" from our generator (if VRNN and we
     # only have a single-dimensional x, e.g. in the "trivial" datasets)
-    if extra_model_outputs is not None and num_features == 1:
+    if extra_model_outputs is not None:
         # We'll get the decoder's mu and sigma from the evaluation/validation set since
         # it's much larger than the training batches
-        mu, sigma = sess.run(extra_model_outputs, feed_dict={
+        mu_a, sigma_a = sess.run(extra_model_outputs, feed_dict={
             x: eval_data_a, keep_prob: 1.0, training: False
         })
 
-        recon_a_plot = plot_random_time_series(
-            mu, sigma, title='VRNN Samples (source domain)',
-            filename=recon_a_filename)
-
-        mu, sigma = sess.run(extra_model_outputs, feed_dict={
+        mu_b, sigma_b = sess.run(extra_model_outputs, feed_dict={
             x: eval_data_b, keep_prob: 1.0, training: False
         })
 
-        recon_b_plot = plot_random_time_series(
-            mu, sigma, title='VRNN Samples (target domain)',
-            filename=recon_b_filename)
+        for i in range(num_features):
+            recon_a_plot = plot_random_time_series(
+                mu_a[:,:,i], sigma_a[:,:,i],
+                title='VRNN Reconstruction (source domain, feature '+str(i)+')',
+                filename=recon_a_filename)
 
-        plots.append(('reconstruction/a', recon_a_plot))
-        plots.append(('reconstruction/b', recon_b_plot))
+            recon_b_plot = plot_random_time_series(
+                mu_b[:,:,i], sigma_b[:,:,i],
+                title='VRNN Reconstruction (target domain, feature '+str(i)+')',
+                filename=recon_b_filename)
+
+            plots.append(('feature_'+str(i)+'_reconstruction_a', recon_a_plot))
+            plots.append(('feature_'+str(i)+'_reconstruction_b', recon_b_plot))
 
     return plots
 
@@ -460,6 +464,9 @@ def train(data_info,
         #
         # Maybe in the future it would be cool to use TensorFlow's projector in TensorBoard
         # https://medium.com/@vegi/visualizing-higher-dimensional-data-using-t-sne-on-tensorboard-7dbf22682cf2
+        #
+        # Note: the output reconstruction images if using VRNN will be the last
+        # feature since at the moment it won't change the filename for each feature.
         if embedding_prefix is not None:
             """
             if os.path.exists(tsne_filename+'_tsne_fit.npy'):
@@ -472,7 +479,6 @@ def train(data_info,
             np.save(tsne_filename+'_tsne_fit', tsne)
             np.save(tsne_filename+'_pca_fit', pca)
             """
-            # Get the first batch of evaluation data to use for these plots
             evaluation_plots(sess,
                 eval_input_hook_a, eval_input_hook_b,
                 next_data_batch_test_a, next_labels_batch_test_a,
