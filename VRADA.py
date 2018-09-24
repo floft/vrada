@@ -290,13 +290,13 @@ def train(data_info,
     # Summaries - training and evaluation for both domains A and B
     training_summaries_a = tf.summary.merge([
         tf.summary.scalar("loss/total_loss", total_loss),
-        tf.summary.scalar("accuracy/task/source/training", task_accuracy),
-        tf.summary.scalar("accuracy/domain/source/training", domain_accuracy),
+        tf.summary.scalar("accuracy_task/source/training", task_accuracy),
+        tf.summary.scalar("accuracy_domain/source/training", domain_accuracy),
     ])
     training_summaries_extra_a = tf.summary.merge(model_summaries)
     training_summaries_b = tf.summary.merge([
-        tf.summary.scalar("accuracy/task/target/training", task_accuracy),
-        tf.summary.scalar("accuracy/domain/target/training", domain_accuracy)
+        tf.summary.scalar("accuracy_task/target/training", task_accuracy),
+        tf.summary.scalar("accuracy_domain/target/training", domain_accuracy)
     ])
 
     # Allow restoring global_step from past run
@@ -407,19 +407,19 @@ def train(data_info,
                     batch_size)
 
                 task_source_val = tf.Summary(value=[tf.Summary.Value(
-                    tag="accuracy/task/source/validation",
+                    tag="accuracy_task/source/validation",
                     simple_value=task_a_accuracy
                 )])
                 domain_source_val = tf.Summary(value=[tf.Summary.Value(
-                    tag="accuracy/domain/source/validation",
+                    tag="accuracy_domain/source/validation",
                     simple_value=domain_a_accuracy
                 )])
                 task_target_val = tf.Summary(value=[tf.Summary.Value(
-                    tag="accuracy/task/target/validation",
+                    tag="accuracy_task/target/validation",
                     simple_value=task_b_accuracy
                 )])
                 domain_target_val = tf.Summary(value=[tf.Summary.Value(
-                    tag="accuracy/domain/target/validation",
+                    tag="accuracy_domain/target/validation",
                     simple_value=domain_b_accuracy
                 )])
                 writer.add_summary(task_source_val, step)
