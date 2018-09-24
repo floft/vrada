@@ -109,7 +109,7 @@ def evaluation_plots(sess,
     next_data_batch_test_b, next_labels_batch_test_b,
     source_domain, target_domain,
     feature_extractor, x, keep_prob, training, adaptation,
-    extra_model_outputs=None,
+    extra_model_outputs, num_features,
     tsne_filename=None,
     pca_filename=None,
     recon_a_filename=None,
@@ -152,8 +152,9 @@ def evaluation_plots(sess,
     plots.append(('adaptation/tsne', tsne_plot))
     plots.append(('adaptation/pca', pca_plot))
 
-    # Output time-series "reconstructions" from our generator (if VRNN)
-    if extra_model_outputs is not None:
+    # Output time-series "reconstructions" from our generator (if VRNN and we
+    # only have a single-dimensional x, e.g. in the "trivial" datasets)
+    if extra_model_outputs is not None and num_features == 1:
         # We'll get the decoder's mu and sigma from the evaluation/validation set since
         # it's much larger than the training batches
         mu, sigma = sess.run(extra_model_outputs, feed_dict={
@@ -439,7 +440,7 @@ def train(data_info,
                     next_data_batch_test_b, next_labels_batch_test_b,
                     source_domain, target_domain,
                     feature_extractor, x, keep_prob, training, adaptation,
-                    extra_model_outputs)
+                    extra_model_outputs, num_features)
 
                 for name, buf in plots:
                     # See: https://gist.github.com/gyglim/1f8dfb1b5c82627ae3efcfbbadb9f514
@@ -478,7 +479,7 @@ def train(data_info,
                 next_data_batch_test_b, next_labels_batch_test_b,
                 source_domain, target_domain,
                 feature_extractor, x, keep_prob, training, adaptation,
-                extra_model_outputs,
+                extra_model_outputs, num_features,
                 tsne_filename=os.path.join(img_dir, embedding_prefix+"_tsne.png"),
                 pca_filename=os.path.join(img_dir, embedding_prefix+"_pca.png"),
                 recon_a_filename=os.path.join(img_dir, embedding_prefix+"_reconstruction_a.png"),
