@@ -21,7 +21,7 @@ import matplotlib as mpl
 mpl.use('Agg')
 import matplotlib.pyplot as plt
 
-from plot import plot_embedding, plot_random_time_series
+from plot import plot_embedding, plot_random_time_series, plot_real_time_series
 from model import build_lstm, build_vrnn
 from load_data import IteratorInitializerHook, \
     load_data, one_hot, \
@@ -113,7 +113,9 @@ def evaluation_plots(sess,
     tsne_filename=None,
     pca_filename=None,
     recon_a_filename=None,
-    recon_b_filename=None):
+    recon_b_filename=None,
+    real_a_filename=None,
+    real_b_filename=None):
     """
     Run the first batch of evaluation data through the feature extractor, then
     generate and return the PCA and t-SNE plots. Optionally, save these to a file
@@ -179,6 +181,20 @@ def evaluation_plots(sess,
 
             plots.append(('feature_'+str(i)+'_reconstruction_a', recon_a_plot))
             plots.append(('feature_'+str(i)+'_reconstruction_b', recon_b_plot))
+
+            # Real data
+            real_a_plot = plot_real_time_series(
+                eval_data_a[:,:,i],
+                title='Real Data (source domain, feature '+str(i)+')',
+                filename=real_a_filename)
+
+            real_b_plot = plot_real_time_series(
+                eval_data_b[:,:,i],
+                title='Real Data (target domain, feature '+str(i)+')',
+                filename=real_b_filename)
+
+            plots.append(('feature_'+str(i)+'_real_a', real_a_plot))
+            plots.append(('feature_'+str(i)+'_real_b', real_b_plot))
 
     return plots
 

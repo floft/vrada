@@ -105,3 +105,48 @@ def plot_random_time_series(mu, sigma, num_samples=5, title=None, filename=None)
     plt.close(fig)
 
     return buf.getvalue()
+
+def plot_real_time_series(y, num_samples=5, title=None, filename=None):
+    """
+    Plot the real time-series data for comparison with the reconstruction
+
+    Input:
+        input x values (real data)
+            shape: [batch_size, time_steps, num_features]
+        num_samples -- how many lines/curves you want to plot
+        title, filename -- optional
+    Output:
+        plot of input time-series
+
+    Note: at the moment we're assuming num_features=1 (plot will be 2D)
+    """
+    y = np.squeeze(y)
+    length = y.shape[1]
+
+    # Take only desired number of time-series
+    num_samples = min(num_samples, y.shape[0])
+    y = y[:num_samples,:]
+
+    # x axis is just 0, 1, 2, 3, ...
+    x = np.arange(length)
+
+    fig = plt.figure()
+    for i in range(y.shape[0]):
+        plt.plot(x, y[i,:])
+
+    if title is not None:
+        plt.title(title)
+
+    if filename is not None:
+        plt.savefig(filename, bbox_inches='tight', pad_inches=0, transparent=True)
+
+    # Save to buffer for sending to TensorBoard
+    # See: https://stackoverflow.com/a/38676842/2698494
+    buf = io.BytesIO()
+    plt.savefig(buf, format='png',
+        bbox_inches='tight', pad_inches=0, transparent=True)
+    buf.seek(0)
+
+    plt.close(fig)
+
+    return buf.getvalue()
