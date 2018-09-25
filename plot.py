@@ -23,7 +23,7 @@ def plot_embedding(x, y, d, title=None, filename=None):
     }
 
     # Plot colors numbers
-    plt.figure(figsize=(10,10))
+    fig = plt.figure(figsize=(10,10))
     plt.subplot(111)
     for i in range(x.shape[0]):
         # plot colored number
@@ -45,6 +45,14 @@ def plot_embedding(x, y, d, title=None, filename=None):
     plt.savefig(buf, format='png',
         bbox_inches='tight', pad_inches=0, transparent=True)
     buf.seek(0)
+
+    # Make sure we don't keep these plots in memory forever. Otherwise we get:
+    #
+    # "More than 20 figures have been opened. Figures created through the pyplot
+    # interface (`matplotlib.pyplot.figure`) are retained until explicitly closed
+    # and may consume too much memory."
+    plt.close(fig)
+
     return buf.getvalue()
 
 def plot_random_time_series(mu, sigma, num_samples=5, title=None, filename=None):
@@ -77,7 +85,7 @@ def plot_random_time_series(mu, sigma, num_samples=5, title=None, filename=None)
     # y is values sampled from mu and simga
     y = sigma*np.random.normal(0, 1, (num_samples, length)) + mu
 
-    plt.figure()
+    fig = plt.figure()
     for i in range(y.shape[0]):
         plt.plot(x, y[i,:])
 
@@ -93,4 +101,7 @@ def plot_random_time_series(mu, sigma, num_samples=5, title=None, filename=None)
     plt.savefig(buf, format='png',
         bbox_inches='tight', pad_inches=0, transparent=True)
     buf.seek(0)
+
+    plt.close(fig)
+
     return buf.getvalue()
