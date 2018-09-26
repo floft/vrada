@@ -25,7 +25,7 @@ tmpdir="/dev/shm/mimic_database"
 # We'll store the dtabase in RAM
 postgres_pid=""
 
-function clean_up 
+function clean_up
 {
 	if [[ ! -z $postgres_pid ]]; then
         echo "Stopping PostgreSQL"
@@ -95,7 +95,7 @@ jnb() {
 psqlf() {
     # Note /tmp since the Unix socket is stored there when we run postgres
     # above
-    psql -d mimic postgres -d /tmp -f "$@"
+    psql 'host=/tmp user=postgres dbname=mimic options=--search_path=mimiciii' -f "$@"
 }
 
 jnb "0_createAdmissionList.ipynb"

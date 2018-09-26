@@ -85,6 +85,8 @@ Now we can create the database with the MIMIC-III scripts.
     datadir="../../../../mimic-iii/"
     cd datasets/mimic-code/buildmimic/postgres
     make mimic-gz datadir="$datadir"
+    make concepts
+    make concepts_48
     cd -
 
 This likely will take many hours. It took 8 hours on my computer (not an SSD),
@@ -130,7 +132,7 @@ prefer using a GUI rather than the terminal, you can open them as usual with
 
 Generate some more tables that are used during processing.
 
-    alias psqlf='psql -d mimic postgres -f'
+    alias psqlf='psql "user=postgres dbname=mimic options=--search_path=mimiciii" -f'
 
     psqlf "sql_gen_17features_ts/gen_gcs_ts.sql"
     psqlf "sql_gen_17features_ts/gen_lab_ts.sql"

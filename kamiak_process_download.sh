@@ -5,7 +5,8 @@
 . kamiak_config.sh
 
 # Note both have trailing slashes
-from="$remotessh:$remotedir/$mimiccode/"
-to="$localdir/$mimiccode/"
+from="$remotessh:$remotedir/"
+to="$localdir/"
 
-rsync -Pahuv "$from" "$to"
+rsync -Pahuv "$from/$mimiccode/" "$to/$mimiccode/"
+rsync -Pahuv "$from/$mimicdata/" "$to/$mimicdata/"

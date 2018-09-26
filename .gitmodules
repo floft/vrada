@@ -4,4 +4,4 @@
 	ignore = dirty
 [submodule "datasets/mimic-code"]
 	path = datasets/mimic-code
-	url = https://github.com/MIT-LCP/mimic-code.git
+	url = https://github.com/floft/mimic-code.git

@@ -13,6 +13,7 @@ dataset=("datasets/RFSleep"/*.npy)
 # For processing MIMIC-III dataset - directory for database
 mimicdir="mimic-iii"
 mimiccode="datasets/process-mimic-iii/Codes/mimic3_mvcv"
+mimicdata="datasets/process-mimic-iii/Data"
 bindir="postgres/usr/local/pgsql/bin/" # where postgres and psql are
 libdir="postgres/usr/local/pgsql/lib"
 
