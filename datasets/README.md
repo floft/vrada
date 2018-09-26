@@ -86,7 +86,7 @@ Now we can create the database with the MIMIC-III scripts.
     cd datasets/mimic-code/buildmimic/postgres
     make mimic-gz datadir="$datadir"
     make concepts
-    make concepts_48
+    make concepts48
     cd -
 
 This likely will take many hours. It took 8 hours on my computer (not an SSD),

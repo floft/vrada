@@ -5,3 +5,4 @@
 [submodule "datasets/mimic-code"]
 	path = datasets/mimic-code
 	url = https://github.com/floft/mimic-code.git
+	ignore = dirty
