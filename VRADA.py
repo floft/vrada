@@ -357,7 +357,9 @@ def train(data_info,
                 combined_labels = np.concatenate((labels_batch_a, np.zeros(labels_batch_b.shape)), axis=0)
                 combined_domain = np.concatenate((source_domain, target_domain), axis=0)
 
-                # Train everything in one step which should give a similar result
+                # Train everything in one step and domain more next. This seemed
+                # to work better for me than just nondomain then domain, though
+                # it seems likely the results would be similar.
                 sess.run(train_all, feed_dict={
                     x: combined_x, y: combined_labels, domain: combined_domain,
                     grl_lambda: grl_lambda_value,
@@ -367,8 +369,8 @@ def train(data_info,
                 # Update domain more
                 #
                 # Depending on the num_steps, your learning rate, etc. it may be
-                # beneficial to increase the learning rate here to e.g. 10*lr
-                # or 100*lr. This may also depend on your dataset though.
+                # beneficial to have a different learning rate here -- hence the
+                # lr_multiplier option. This may also depend on your dataset though.
                 sess.run(train_domain, feed_dict={
                     x: combined_x, y: combined_labels, domain: combined_domain,
                     grl_lambda: 0.0,

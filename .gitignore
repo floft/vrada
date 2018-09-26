@@ -3,8 +3,6 @@ __pycache__/
 .vscode/
 
 # TensorFlow files
-trivial/
-mimic-iii/
 *model*/
 *log*/
 
@@ -16,3 +14,5 @@ mimic-iii/
 # Datasets
 *.npy
 RFSleep/
+trivial/
+mimic-iii/
