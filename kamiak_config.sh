@@ -1,10 +1,10 @@
 #
 # Config file for running on high performance cluster with Slurm
 #
-dir="/data/vcea/matt.taylor/Projects/ras-object-detection/vrada"
+dir="/data/vcea/garrett.wilson/vrada"
 program="VRADA.py"
-modelFolder="vrada-sleep-models"
-logFolder="vrada-sleep-logs"
+modelFolder="vrada-mimic-models"
+logFolder="vrada-mimic-logs"
 #compressedDataset="trivial.zip"
 #dataset=("datasets/trivial")
 #compressedDataset="rfsleep.zip"

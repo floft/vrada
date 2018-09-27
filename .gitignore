@@ -1,6 +1,7 @@
 __pycache__/
 .ipynb_checkpoints/
 .vscode/
+commands.txt
 
 # TensorFlow files
 *model*/

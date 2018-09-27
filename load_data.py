@@ -225,7 +225,7 @@ def load_data_sleep(dir_name, domain_a_percent=0.7, train_percent=0.7, seed=0):
 
 # Load MIMIC-III time-series datasets
 def load_data_mimiciii(data_filename, folds_filename, folds_stat_filename=None,
-    label_type=0):
+    label_type=0, fold=0):
     """
     Load MIMIC-III time-series data: domain adaptation on age for predicting mortality
 
@@ -233,6 +233,7 @@ def load_data_mimiciii(data_filename, folds_filename, folds_stat_filename=None,
     - We won't use folds at the moment except to pick data in the training vs.
       testing sets. We'll use validation as the testing set.
     - not using fold stats at the moment
+    - not doing cross validation at the moment, so just pick a fold to use
     - our domains will be based on age, similar to the paper
 
     Based on: https://github.com/USC-Melady/Benchmarking_DL_MIMICIII/blob/master/Codes/DeepLearningModels/python/betterlearner.py
@@ -258,13 +259,13 @@ def load_data_mimiciii(data_filename, folds_filename, folds_stat_filename=None,
     # Groups have roughly the same percentages as mentioned in paper
     #
     # Group 2: working-age adult (20 to 45 yrs, 508 patients)
-    group2 = (age >= 20) & (age < 45) # actually 4946
+    group2 = np.where((age >= 20) & (age < 45)) # actually 4946
     # Group 3: old working-age adult (46 to 65 yrs, 1888 patients)
-    group3 = (age >= 45) & (age < 65) # actually 11953
+    group3 = np.where((age >= 45) & (age < 65)) # actually 11953
     # Group 4: elderly (66 to 85 yrs, 2394 patients)
-    group4 = (age >= 65) & (age < 85) # actually 14690
+    group4 = np.where((age >= 65) & (age < 85)) # actually 14690
     # Group 5: old elderly (85 yrs and up, 437 patients).
-    group5 = (age >= 85) # actually 3750
+    group5 = np.where((age >= 85)) # actually 3750
 
     # R-DANN should get ~0.821 accuracy and VRADA 0.770
     domain_a = group4
@@ -279,19 +280,19 @@ def load_data_mimiciii(data_filename, folds_filename, folds_stat_filename=None,
     #validation_folds = folds_file['folds_ep_mor'][label_type,0,:,VALIDATION]
     testing_folds = folds_file['folds_ep_mor'][label_type,0,:,TESTING]
 
-    training_indices = np.hstack(training_folds)
-    #validation_indices = np.hstack(validation_folds)
-    testing_indices = np.hstack(testing_folds)
+    training_indices = training_folds[fold]
+    #validation_indices = validation_folds[fold]
+    testing_indices = testing_folds[fold]
 
     # Split data
-    train_data_a = x[domain_a & training_indices]
-    train_labels_a = y[domain_a & training_indices]
-    test_data_a = x[domain_a & testing_indices]
-    test_labels_a = y[domain_a & testing_indices]
-    train_data_b = x[domain_b & training_indices]
-    train_labels_b = y[domain_b & training_indices]
-    test_data_b = x[domain_b & testing_indices]
-    test_labels_b = y[domain_b & testing_indices]
+    train_data_a = x[np.intersect1d(domain_a, training_indices)]
+    train_labels_a = y[np.intersect1d(domain_a, training_indices)]
+    test_data_a = x[np.intersect1d(domain_a, testing_indices)]
+    test_labels_a = y[np.intersect1d(domain_a, testing_indices)]
+    train_data_b = x[np.intersect1d(domain_b, training_indices)]
+    train_labels_b = y[np.intersect1d(domain_b, training_indices)]
+    test_data_b = x[np.intersect1d(domain_b, testing_indices)]
+    test_labels_b = y[np.intersect1d(domain_b, testing_indices)]
 
     return train_data_a, train_labels_a, \
         test_data_a, test_labels_a, \
