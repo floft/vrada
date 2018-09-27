@@ -78,10 +78,11 @@ export PATH="$bindir:$PATH"
 export LD_LIBRARY_PATH="$libdir:$LD_LIBRARY_PATH"
 postgres -D "$tmpdir/data" &
 postgres_pid=$!
+sleep 5 # Make sure DB is up
 
 # Make sure it'll connect to the socket in /tmp
 grep "host='/tmp'" "$codedir/utils.py" >/dev/null || \
-    sed -ri "s#(psycopg2\.connect\(\")(.*)(\"\))#\1\2 host='/tmp'\3#g" "$codedir/utils.py"
+    sed -ri "s#(psycopg2\.connect\(\")(.*)(\"\))#\1\2 host='/tmp' options='--search_path=mimiciii'\3#g" "$codedir/utils.py"
 
 # Process
 echo "Processing data: started"
@@ -110,11 +111,19 @@ jnb "8_processing.ipynb"
 jnb "9_collect_mortality_labels.ipynb"
 jnb "9_getValidDataset.ipynb"
 
-psqlf "sql_gen_17features_ts/gen_gcs_ts.sql"
-psqlf "sql_gen_17features_ts/gen_lab_ts.sql"
-psqlf "sql_gen_17features_ts/gen_pao2_fio2.sql"
-psqlf "sql_gen_17features_ts/gen_urine_output_ts.sql"
-psqlf "sql_gen_17features_ts/gen_vital_ts.sql"
+wait_list=()
+psqlf "sql_gen_17features_ts/gen_gcs_ts.sql" &
+wait_list+=($!)
+psqlf "sql_gen_17features_ts/gen_lab_ts.sql" &
+wait_list+=($!)
+psqlf "sql_gen_17features_ts/gen_pao2_fio2.sql" &
+wait_list+=($!)
+psqlf "sql_gen_17features_ts/gen_urine_output_ts.sql" &
+wait_list+=($!)
+psqlf "sql_gen_17features_ts/gen_vital_ts.sql" &
+wait_list+=($!)
+wait "${wait_list[@]}"
+
 psqlf "sql_gen_17features_ts/gen_17features_first24h.sql"
 psqlf "sql_gen_17features_ts/gen_17features_first48h.sql"
 
@@ -122,12 +131,20 @@ jnb "10_get_17-features-processed(fromdb).ipynb"
 jnb "10_get_17-features-raw.ipynb"
 jnb "10_get_99plus-features-raw.ipynb"
 
-jnb "11_get_time_series_sample_17-features-processed_24hrs.ipynb"
-jnb "11_get_time_series_sample_17-features-processed_48hrs.ipynb"
-jnb "11_get_time_series_sample_17-features-raw_24hrs.ipynb"
-jnb "11_get_time_series_sample_17-features-raw_48hrs.ipynb"
-jnb "11_get_time_series_sample_99plus-features-raw_24hrs.ipynb"
-jnb "11_get_time_series_sample_99plus-features-raw_48hrs.ipynb"
+wait_list=()
+jnb "11_get_time_series_sample_17-features-processed_24hrs.ipynb" &
+wait_list+=($!)
+jnb "11_get_time_series_sample_17-features-processed_48hrs.ipynb" &
+wait_list+=($!)
+jnb "11_get_time_series_sample_99plus-features-raw_48hrs.ipynb" &
+wait_list+=($!)
+wait "${wait_list[@]}"
+
+# These error
+#jnb "11_get_time_series_sample_17-features-raw_24hrs.ipynb"
+#jnb "11_get_time_series_sample_17-features-raw_48hrs.ipynb"
+# We didn't generate this
+#jnb "11_get_time_series_sample_99plus-features-raw_24hrs.ipynb"
 
 echo "Processing data: done"
 
