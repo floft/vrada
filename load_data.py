@@ -222,3 +222,78 @@ def load_data_sleep(dir_name, domain_a_percent=0.7, train_percent=0.7, seed=0):
         test_data_a, test_labels_a, \
         train_data_b, train_labels_b, \
         test_data_b, test_labels_b
+
+# Load MIMIC-III time-series datasets
+def load_data_mimiciii(data_filename, folds_filename, folds_stat_filename=None,
+    label_type=0):
+    """
+    Load MIMIC-III time-series data: domain adaptation on age for predicting mortality
+
+    - label_type=0 for mortality
+    - We won't use folds at the moment except to pick data in the training vs.
+      testing sets. We'll use validation as the testing set.
+    - not using fold stats at the moment
+    - our domains will be based on age, similar to the paper
+
+    Based on: https://github.com/USC-Melady/Benchmarking_DL_MIMICIII/blob/master/Codes/DeepLearningModels/python/betterlearner.py
+    """
+    # Load all the required .npz files
+    data_file = np.load(data_filename)
+    folds_file = np.load(folds_filename)
+
+    # Not using fold stats
+    #folds_stat_file = np.load(folds_stat_filename)
+    #folds_stat = folds_stat_file['folds_ep_mor'][label_type]
+
+    # Get time-series data and labels
+    adm_labels = data_file['adm_labels_all']
+    y = adm_labels[:, label_type]
+    x = data_file['ep_tdata']
+
+    # non-time-series data -- shape = [admid, features=5]
+    # features: age, aids, hem, mets, admissiontype
+    adm_features = data_file['adm_features_all']
+    age = adm_features[:,0] / 365.25
+
+    # Groups have roughly the same percentages as mentioned in paper
+    #
+    # Group 2: working-age adult (20 to 45 yrs, 508 patients)
+    group2 = (age >= 20) & (age < 45) # actually 4946
+    # Group 3: old working-age adult (46 to 65 yrs, 1888 patients)
+    group3 = (age >= 45) & (age < 65) # actually 11953
+    # Group 4: elderly (66 to 85 yrs, 2394 patients)
+    group4 = (age >= 65) & (age < 85) # actually 14690
+    # Group 5: old elderly (85 yrs and up, 437 patients).
+    group5 = (age >= 85) # actually 3750
+
+    # R-DANN should get ~0.821 accuracy and VRADA 0.770
+    domain_a = group4
+    domain_b = group3
+
+    # Get the information about the folds
+    TRAINING = 0
+    #VALIDATION = 1
+    TESTING = 2
+
+    training_folds = folds_file['folds_ep_mor'][label_type,0,:,TRAINING]
+    #validation_folds = folds_file['folds_ep_mor'][label_type,0,:,VALIDATION]
+    testing_folds = folds_file['folds_ep_mor'][label_type,0,:,TESTING]
+
+    training_indices = np.hstack(training_folds)
+    #validation_indices = np.hstack(validation_folds)
+    testing_indices = np.hstack(testing_folds)
+
+    # Split data
+    train_data_a = x[domain_a & training_indices]
+    train_labels_a = y[domain_a & training_indices]
+    test_data_a = x[domain_a & testing_indices]
+    test_labels_a = y[domain_a & testing_indices]
+    train_data_b = x[domain_b & training_indices]
+    train_labels_b = y[domain_b & training_indices]
+    test_data_b = x[domain_b & testing_indices]
+    test_labels_b = y[domain_b & testing_indices]
+
+    return train_data_a, train_labels_a, \
+        test_data_a, test_labels_a, \
+        train_data_b, train_labels_b, \
+        test_data_b, test_labels_b

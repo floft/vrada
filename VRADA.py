@@ -26,7 +26,7 @@ from model import build_lstm, build_vrnn
 from load_data import IteratorInitializerHook, \
     load_data, one_hot, \
     domain_labels, _get_input_fn, \
-    load_data_sleep
+    load_data_sleep, load_data_mimiciii
 
 def evaluation_accuracy(sess,
     eval_input_hook_a, eval_input_hook_b,
@@ -597,8 +597,20 @@ if __name__ == '__main__':
         num_classes = len(np.unique(train_labels_a))
         data_info = (time_steps, num_features, num_classes)
     elif args.mimic:
-        index_one = False
-        raise NotImplementedError()
+        data_path = "datasets/process-mimic-iii/Data/admdata_17f/24hrs/series/"
+        train_data_a, train_labels_a, \
+        test_data_a, test_labels_a, \
+        train_data_b, train_labels_b, \
+        test_data_b, test_labels_b = load_data_mimiciii(
+            data_filename=os.path.join(data_path, "imputed-normed-ep_1_24.npz"),
+            folds_filename=os.path.join(data_path, "5-folds.npz"))
+
+        # Information about dataset
+        index_one = False # Labels start from 0
+        num_features = train_data_a.shape[2]
+        time_steps = train_data_a.shape[1]
+        num_classes = len(np.unique(train_labels_a))
+        data_info = (time_steps, num_features, num_classes)
 
     # One-hot encoding
     train_data_a, train_labels_a = one_hot(train_data_a, train_labels_a, num_classes, index_one)

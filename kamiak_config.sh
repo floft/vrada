@@ -7,8 +7,10 @@ modelFolder="vrada-sleep-models"
 logFolder="vrada-sleep-logs"
 #compressedDataset="trivial.zip"
 #dataset=("datasets/trivial")
-compressedDataset="rfsleep.zip"
-dataset=("datasets/RFSleep"/*.npy)
+#compressedDataset="rfsleep.zip"
+#dataset=("datasets/RFSleep"/*.npy)
+compressedDataset="mimiciii.zip"
+dataset=("datasets/process-mimic-iii/Data/admdata_17f/24hrs/series/"/{imputed-normed-ep_1_24.npz,5-folds.npz})
 
 # For processing MIMIC-III dataset - directory for database
 mimicdir="mimic-iii"

@@ -105,7 +105,8 @@ Next, tell it how to connect to your database by editing
 `getConnection()` in *datasets/process-mimic-iii/Codes/mimic3_mvcv/utils.py*
 
     def getConnection():
-        return psycopg2.connect("dbname='mimic' user='postgres' password='postgres'")
+        return psycopg2.connect("dbname='mimic' user='postgres' password='postgres'" \
+            +" options='--search_path=mimiciii'")
 
 Run a bunch of notebooks to generate the time-series data. Alternatively if you
 prefer using a GUI rather than the terminal, you can open them as usual with
@@ -126,9 +127,6 @@ prefer using a GUI rather than the terminal, you can open them as usual with
     jnb "8_processing.ipynb"
     jnb "9_collect_mortality_labels.ipynb"
     jnb "9_getValidDataset.ipynb"
-    jnb "10_get_17-features-processed(fromdb).ipynb"
-    jnb "10_get_17-features-raw.ipynb"
-    jnb "10_get_99plus-features-raw.ipynb"
 
 Generate some more tables that are used during processing.
 
@@ -144,11 +142,14 @@ Generate some more tables that are used during processing.
 
 Run a few more notebooks.
 
+    jnb "10_get_17-features-processed(fromdb).ipynb"
+    jnb "10_get_17-features-raw.ipynb"
+    jnb "10_get_99plus-features-raw.ipynb"
     jnb "11_get_time_series_sample_17-features-processed_24hrs.ipynb"
     jnb "11_get_time_series_sample_17-features-processed_48hrs.ipynb"
-    jnb "11_get_time_series_sample_17-features-raw_24hrs.ipynb"
-    jnb "11_get_time_series_sample_17-features-raw_48hrs.ipynb"
-    jnb "11_get_time_series_sample_99plus-features-raw_24hrs.ipynb"
+    #jnb "11_get_time_series_sample_17-features-raw_24hrs.ipynb"
+    #jnb "11_get_time_series_sample_17-features-raw_48hrs.ipynb"
+    #jnb "11_get_time_series_sample_99plus-features-raw_24hrs.ipynb"
     jnb "11_get_time_series_sample_99plus-features-raw_48hrs.ipynb"
     cd -
 
@@ -156,8 +157,3 @@ Run a few more notebooks.
 doing this on an SSD. Though, I copied the PostgreSQL database to a high
 performance cluster into RAM and ran all the processing there. This can be seen
 in the Slurm script *../kamiak_process.srun*
-
-### Create .tfrecord for TensorFlow
-
-You can generate the .tfrecord files by running
-`python3 datasets/generate_mimic_iii.py`.
