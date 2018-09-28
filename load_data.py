@@ -256,6 +256,12 @@ def load_data_mimiciii(data_filename, folds_filename, folds_stat_filename=None,
     adm_features = data_file['adm_features_all']
     age = adm_features[:,0] / 365.25
 
+    # Get rid of Nans that cause training problems
+    adm_features[np.isinf(adm_features)] = 0
+    adm_features[np.isnan(adm_features)] = 0
+    x[np.isinf(x)] = 0
+    x[np.isnan(x)] = 0
+
     # Groups have roughly the same percentages as mentioned in paper
     #
     # Group 2: working-age adult (20 to 45 yrs, 508 patients)
