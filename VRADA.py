@@ -488,10 +488,10 @@ def train(data_info,
                     batch_size, auc_labels, auc_predictions, task_auc_all)
 
                 task_source_val = []
-                for i in range(num_classes):
+                for j in range(num_classes):
                     task_source_val += [tf.Summary(value=[tf.Summary.Value(
-                        tag="accuracy_task_class%d/source/validation" % i,
-                        simple_value=task_a_accuracy[i]
+                        tag="accuracy_task_class%d/source/validation" % j,
+                        simple_value=task_a_accuracy[j]
                     )])]
                 task_source_val_avg = tf.Summary(value=[tf.Summary.Value(
                         tag="accuracy_task_avg/source/validation",
@@ -506,10 +506,10 @@ def train(data_info,
                     simple_value=task_a_auc
                 )])
                 task_target_val = []
-                for i in range(num_classes):
+                for j in range(num_classes):
                     task_target_val += [tf.Summary(value=[tf.Summary.Value(
-                        tag="accuracy_task_class%d/target/validation" % i,
-                        simple_value=task_b_accuracy[i]
+                        tag="accuracy_task_class%d/target/validation" % j,
+                        simple_value=task_b_accuracy[j]
                     )])]
                 task_target_val_avg = tf.Summary(value=[tf.Summary.Value(
                         tag="accuracy_task_avg/target/validation",
