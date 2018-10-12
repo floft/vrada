@@ -85,7 +85,11 @@ pip install --user virtualenvwrapper
 export VIRTUALENVWRAPPER_PYTHON="$(which python3)"
 export WORKON_HOME=~/Envs
 source ~/.local/bin/virtualenvwrapper.sh
-mkvirtualenv -p python3 tensorflow_cpu
+if [[ ! -e ~/Envs/tensorflow_cpu ]]; then
+    mkvirtualenv -p python3 tensorflow_cpu
+else
+    workon tensorflow_cpu
+fi
 # Seems to hang on numpy without --no-cache-dir?
 pip --no-cache-dir install tensorflow pillow lxml jupyter matplotlib pandas sklearn scipy
 echo "Making sure TensorFlow installed: done"
