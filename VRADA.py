@@ -243,7 +243,7 @@ def train(data_info,
         model_save_steps=1000,
         log_save_steps=50,
         log_validation_accuracy_steps=250,
-        log_extra_save_steps=500,
+        log_extra_save_steps=1000,
         adaptation=True,
         multi_class=False):
 
@@ -611,8 +611,8 @@ if __name__ == '__main__':
         help="Log training losses and accuracy every so many steps (default 50)")
     parser.add_argument('--log-steps-val', default=250, type=int,
         help="Log validation accuracy and AUC every so many steps (default 250)")
-    parser.add_argument('--log-steps-slow', default=500, type=int,
-        help="Log weights, plots, etc. every so many steps (default 500)")
+    parser.add_argument('--log-steps-slow', default=1000, type=int,
+        help="Log weights, plots, etc. every so many steps (default 1000)")
     parser.add_argument('--debug', dest='debug', action='store_true',
         help="Start new log/model/images rather than continuing from previous run")
     parser.add_argument('--debug-num', default=-1, type=int,
