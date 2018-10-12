@@ -68,7 +68,7 @@ def classifier(x, num_classes, keep_prob, training, batch_norm):
 
 def build_model(x, y, domain, grl_lambda, keep_prob, training,
         num_classes, adaptation=True, multi_class=False, batch_norm=False,
-        two_domain_classifiers=False):
+        two_domain_classifiers=False, log_outputs=True):
     """
     Creates the feature extractor, task classifier, domain classifier
 
@@ -174,10 +174,19 @@ def build_model(x, y, domain, grl_lambda, keep_prob, training,
     summaries = [
         tf.summary.scalar("loss/task_loss", task_loss),
         tf.summary.scalar("loss/domain_loss", domain_loss),
-        tf.summary.histogram("outputs/feature_extractor", feature_extractor),
-        tf.summary.histogram("outputs/task_classifier", task_softmax),
-        tf.summary.histogram("outputs/domain_classifier", domain_softmax),
     ]
+
+    if log_outputs:
+        summaries += [
+            tf.summary.histogram("outputs/feature_extractor", feature_extractor),
+            tf.summary.histogram("outputs/domain_classifier", domain_softmax),
+        ]
+
+        for i in range(num_classes):
+            summaries += [
+                tf.summary.histogram("outputs/task_classifier_%d" % i,
+                    tf.slice(task_softmax, [i], [1]))
+            ]
 
     return task_softmax, domain_softmax, task_loss, domain_loss, \
         feature_extractor, summaries
@@ -216,7 +225,8 @@ def build_lstm(x, y, domain, grl_lambda, keep_prob, training,
 
 def build_vrnn(x, y, domain, grl_lambda, keep_prob, training,
             num_classes, num_features, adaptation, units,
-            multi_class=False, eps=1e-9, use_z=True):
+            multi_class=False, eps=1e-9, use_z=True,
+            log_outputs=False, log_weights=False):
     """ VRNN model """
     # Build VRNN
     with tf.variable_scope("rnn_model"):
@@ -289,15 +299,23 @@ def build_vrnn(x, y, domain, grl_lambda, keep_prob, training,
     summaries += [
         tf.summary.scalar("loss/kl", tf.reduce_mean(kl_loss)),
         tf.summary.scalar("loss/likelihood", tf.reduce_mean(likelihood_loss)),
-        tf.summary.histogram("outputs/phi_x", x_1),
-        tf.summary.histogram("outputs/phi_z", z_1),
-        tf.summary.histogram("encoder/mu", encoder_mu),
-        tf.summary.histogram("encoder/sigma", encoder_sigma),
-        tf.summary.histogram("decoder/mu", decoder_mu),
-        tf.summary.histogram("decoder/sigma", decoder_sigma),
-        tf.summary.histogram("prior/mu", prior_mu),
-        tf.summary.histogram("prior/sigma", prior_sigma),
     ]
+
+    if log_outputs:
+        summaries += [
+            tf.summary.histogram("outputs/phi_x", x_1),
+            tf.summary.histogram("outputs/phi_z", z_1),
+        ]
+
+    if log_weights:
+        summaries += [
+            tf.summary.histogram("encoder/mu", encoder_mu),
+            tf.summary.histogram("encoder/sigma", encoder_sigma),
+            tf.summary.histogram("decoder/mu", decoder_mu),
+            tf.summary.histogram("decoder/sigma", decoder_sigma),
+            tf.summary.histogram("prior/mu", prior_mu),
+            tf.summary.histogram("prior/sigma", prior_sigma),
+        ]
 
     # So we can generate sample time-series as well
     extra_outputs = [

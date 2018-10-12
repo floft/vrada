@@ -242,7 +242,8 @@ def train(data_info,
         log_dir="logs",
         model_save_steps=1000,
         log_save_steps=50,
-        log_extra_save_steps=250,
+        log_validation_accuracy_steps=250,
+        log_extra_save_steps=500,
         adaptation=True,
         multi_class=False):
 
@@ -304,11 +305,10 @@ def train(data_info,
     # run these multiple times if we can't fit the entire validation set into
     # memory. Then afterwards we can divide by the size of the validation set.
     with tf.variable_scope("task_accuracy"):
-        equals = tf.cast(
-            tf.equal(tf.argmax(y, axis=-1), tf.argmax(task_classifier, axis=-1)),
-        tf.float32)
-        task_accuracy_sum = tf.reduce_sum(equals)
-        task_accuracy = tf.reduce_mean(equals)
+        # Accuracy for each class
+        equals = tf.cast(tf.equal(y, task_classifier), tf.float32)
+        task_accuracy_sum = tf.reduce_sum(equals, axis=0)
+        task_accuracy = tf.reduce_mean(equals, axis=0)
     with tf.variable_scope("domain_accuracy"):
         equals = tf.cast(
             tf.equal(tf.argmax(domain, axis=-1), tf.argmax(domain_classifier, axis=-1)),
@@ -316,9 +316,7 @@ def train(data_info,
         domain_accuracy_sum = tf.reduce_sum(equals)
         domain_accuracy = tf.reduce_mean(equals)
 
-    # The task accuracy above doesn't really make sense when there's multiple
-    # predicted classes (if multi_class==True), so we'll also compute AUC, which
-    # will be more useful
+    # Also compute AUC since that's what's given in some papers
     with tf.variable_scope("task_auc"):
         _, task_auc = tf.metrics.auc(labels=y, predictions=task_classifier)
 
@@ -346,18 +344,27 @@ def train(data_info,
                 var_list=domain_classifier_vars)
 
     # Summaries - training and evaluation for both domains A and B
-    training_summaries_a = tf.summary.merge([
+    training_a_summs = [
         tf.summary.scalar("loss/total_loss", total_loss),
         tf.summary.scalar("auc_task/source/training", task_auc),
-        tf.summary.scalar("accuracy_task/source/training", task_accuracy),
         tf.summary.scalar("accuracy_domain/source/training", domain_accuracy),
-    ])
-    training_summaries_extra_a = tf.summary.merge(model_summaries)
-    training_summaries_b = tf.summary.merge([
+    ]
+    training_b_summs = [
         tf.summary.scalar("auc_task/target/training", task_auc),
-        tf.summary.scalar("accuracy_task/target/training", task_accuracy),
         tf.summary.scalar("accuracy_domain/target/training", domain_accuracy)
-    ])
+    ]
+    for i in range(num_classes):
+        training_a_summs += [
+            tf.summary.scalar("accuracy_task_%d/source/training" % i,
+                tf.slice(task_accuracy, [i], [1])),
+        ]
+        training_b_summs += [
+            tf.summary.scalar("accuracy_task_%d/target/training" % i,
+                tf.slice(task_accuracy, [i], [1])),
+        ]
+    training_summaries_a = tf.summary.merge(training_a_summs)
+    training_summaries_extra_a = tf.summary.merge(model_summaries)
+    training_summaries_b = tf.summary.merge(training_b_summs)
 
     # Allow restoring global_step from past run
     global_step = tf.Variable(0, name="global_step", trainable=False)
@@ -448,16 +455,9 @@ def train(data_info,
                 })
                 writer.add_summary(summ, step)
 
-            # Larger stuff like weights and evaluation occasionally
-            if i%log_extra_save_steps == 0:
-                # Training weights
-                summ = sess.run(training_summaries_extra_a, feed_dict={
-                    x: data_batch_a, y: labels_batch_a, domain: source_domain,
-                    keep_prob: 1.0, training: False
-                })
-                writer.add_summary(summ, step)
-
-                # Evaluation accuracy
+            # Log validation accuracy/AUC less frequently
+            if i%log_validation_accuracy_steps == 0:
+                # Evaluation accuracy and AUC
                 task_a_accuracy, domain_a_accuracy, \
                 task_b_accuracy, domain_b_accuracy, \
                 task_a_auc, task_b_auc = compute_evaluation(sess,
@@ -499,6 +499,15 @@ def train(data_info,
                 writer.add_summary(task_target_val, step)
                 writer.add_summary(domain_target_val, step)
                 writer.add_summary(task_target_auc_val, step)
+
+            # Larger stuff like weights and t-SNE plots occasionally
+            if i%log_extra_save_steps == 0:
+                # Training weights
+                summ = sess.run(training_summaries_extra_a, feed_dict={
+                    x: data_batch_a, y: labels_batch_a, domain: source_domain,
+                    keep_prob: 1.0, training: False
+                })
+                writer.add_summary(summ, step)
 
                 # t-SNE, PCA, and VRNN reconstruction plots
                 plots = evaluation_plots(sess,
@@ -600,8 +609,10 @@ if __name__ == '__main__':
         help="Save the model every so many steps (default 1000)")
     parser.add_argument('--log-steps', default=50, type=int,
         help="Log training losses and accuracy every so many steps (default 50)")
-    parser.add_argument('--log-steps-slow', default=250, type=int,
-        help="Log evaluation accuracy, weights, plots, etc. every so many steps (default 250)")
+    parser.add_argument('--log-steps-val', default=250, type=int,
+        help="Log validation accuracy and AUC every so many steps (default 250)")
+    parser.add_argument('--log-steps-slow', default=500, type=int,
+        help="Log weights, plots, etc. every so many steps (default 500)")
     parser.add_argument('--debug', dest='debug', action='store_true',
         help="Start new log/model/images rather than continuing from previous run")
     parser.add_argument('--debug-num', default=-1, type=int,
@@ -753,5 +764,6 @@ if __name__ == '__main__':
             dropout_keep_prob=args.dropout,
             model_save_steps=args.model_steps,
             log_save_steps=args.log_steps,
+            log_validation_accuracy_steps=args.log_steps_val,
             log_extra_save_steps=args.log_steps_slow,
             multi_class=multi_class)
