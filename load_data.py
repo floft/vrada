@@ -3,6 +3,7 @@ Load data
 
 Functions to load the data into TensorFlow
 """
+import os
 import math
 import random
 import pathlib
@@ -74,6 +75,10 @@ def one_hot(x, y, num_classes, index_one=False):
     (and my synthetic ones that I used the UCR dataset format for), it's indexed
     by 1 not 0, so we subtract one from the index. But, for most other datasets,
     it's 0-indexed.
+
+    If np.squeeze(y) is already 2D (i.e. second dimension has more than 1 class),
+    we'll skip one-hot encoding, assuming that it already is. Then we just convert
+    to float32.
     """
     # Floating point
     x = x.astype(np.float32)
@@ -83,11 +88,16 @@ def one_hot(x, y, num_classes, index_one=False):
     if len(x.shape) < 3:
         x = np.expand_dims(x, axis=2)
 
-    # One-hot encoded
-    if index_one:
-        y = np.eye(num_classes, dtype=np.float32)[np.squeeze(y).astype(np.int32) - 1]
+    # One-hot encoded if not already 2D
+    squeezed = np.squeeze(y)
+    if len(squeezed.shape) < 2:
+        if index_one:
+            y = np.eye(num_classes, dtype=np.float32)[squeezed.astype(np.int32) - 1]
+        else:
+            y = np.eye(num_classes, dtype=np.float32)[squeezed.astype(np.int32)]
     else:
-        y = np.eye(num_classes, dtype=np.float32)[np.squeeze(y).astype(np.int32)]
+        y = y.astype(np.float32)
+        assert squeezed.shape[1] == num_classes, "y.shape[1] != num_classes"
 
     return x, y
 
@@ -170,8 +180,8 @@ def load_data_sleep(dir_name, domain_a_percent=0.7, train_percent=0.7, seed=0):
 
         # Group data by subject, stacking new data at bottom of old data
         if subject not in subject_x:
-            subject_x[subject] = x
-            subject_y[subject] = stage_labels
+            subject_x[subject] = np.copy(x)
+            subject_y[subject] = np.copy(stage_labels)
         else:
             subject_x[subject] = np.vstack([subject_x[subject], x])
             subject_y[subject] = np.hstack([subject_y[subject], stage_labels])
@@ -224,12 +234,24 @@ def load_data_sleep(dir_name, domain_a_percent=0.7, train_percent=0.7, seed=0):
         test_data_b, test_labels_b
 
 # Load MIMIC-III time-series datasets
-def load_data_mimiciii(data_filename, folds_filename, folds_stat_filename=None,
-    label_type=0, fold=0):
+def load_data_mimiciii_ahrf(data_path="datasets/process-mimic-iii/Data/admdata_17f",
+    hrs=24, label_type=0, fold=0):
     """
-    Load MIMIC-III time-series data: domain adaptation on age for predicting mortality
+    Load MIMIC-III time-series data:
+    domain adaptation on age for predicting mortality of adult AHRF patients
 
-    - label_type=0 for mortality
+    WARNING: still haven't figure out how to get only the AHRF patients. Number
+    of patients in each group doesn't match the paper's.
+
+    - data_path = where 24hrs, 48hrs, series, etc. folders are
+    - hrs = 24 or 48, depending on which data you want to use
+    - label_type chooses which mortality, options are:
+        - in-hospital (label_type=0)
+        - 1-day (label_type=1)
+        - 2-day (label_type=2)
+        - 3-day (label_type=3)
+        - 30-day (label_type=4)
+        - 1-year (label_type=5)
     - We won't use folds at the moment except to pick data in the training vs.
       testing sets. We'll use validation as the testing set.
     - not using fold stats at the moment
@@ -238,6 +260,17 @@ def load_data_mimiciii(data_filename, folds_filename, folds_stat_filename=None,
 
     Based on: https://github.com/USC-Melady/Benchmarking_DL_MIMICIII/blob/master/Codes/DeepLearningModels/python/betterlearner.py
     """
+    data_filename = os.path.join(data_path, "%dhrs" % hrs,
+        "series", "imputed-normed-ep_1_%d.npz" % hrs)
+    folds_filename = os.path.join(data_path, "%dhrs" % hrs,
+        "series", "5-folds.npz")
+    merged_filename = os.path.join(data_path, "%dhrs" % hrs,
+        "DB_merged_%dhrs.npy" % hrs)
+    icd9_filename = os.path.join(data_path, "%dhrs" % hrs,
+        "ICD9-%dhrs.npy" % hrs)
+
+    # TODO add the DB_merged... and icd9... to the dataset zip file
+
     # Load all the required .npz files
     data_file = np.load(data_filename)
     folds_file = np.load(folds_filename)
@@ -252,7 +285,12 @@ def load_data_mimiciii(data_filename, folds_filename, folds_stat_filename=None,
     x = data_file['ep_tdata']
 
     # non-time-series data -- shape = [admid, features=5]
-    # features: age, aids, hem, mets, admissiontype
+    # the 5 features:
+    #   - age(days)
+    #   - acquired immunodeficiency syndrome
+    #   - hematologic malignancy
+    #   - metastatic cancer
+    #   - admission type
     adm_features = data_file['adm_features_all']
     age = adm_features[:,0] / 365.25
 
@@ -262,16 +300,100 @@ def load_data_mimiciii(data_filename, folds_filename, folds_stat_filename=None,
     x[np.isinf(x)] = 0
     x[np.isnan(x)] = 0
 
+    # We want to find patients with acute hypoxemic respiratory failure (AHRF).
+    # To get these patients, we need to check three things (see Khemani et al.
+    # "Effect of tidal volume in children with acute hypoxemic respiratory
+    # failure", paragraph about "Patient selection"):
+    #  - acute onset
+    #  - PF ratio <300
+    #  - no left ventricular dysfunction (i.e. PF ratio <300 was due to lungs
+    #    not the heart)
+
+    # Find PF ratio (without averaging over time period, which is in x above)
+    # See: 11_get_time_series_sample_17-features-processed_24hrs.ipynb
+    PAO2_VAR = 4
+    FIO2_VAR = 5
+
+    data_all = np.empty([0], dtype=object)
+    data_all = np.concatenate((data_all, np.load(merged_filename)))
+    # 13 features (2 of which are PaO2 and FiO2 measurements)
+    X_raw_p48 = np.array([np.array(xx, dtype=float)[:,:-2] for xx in data_all])
+    # Times, so we can figure out which stayed for over >24 hours
+    tsraw_p48 = np.array([np.array(xx, dtype=float)[:,-2] for xx in data_all])
+    del data_all
+    idx_x = np.where([(tt[-1] - tt[0]) > 1.0*60*60*hrs for tt in tsraw_p48])[0]
+    tsraw = tsraw_p48[idx_x]
+    X_raw = X_raw_p48[idx_x]
+
+    # Get just these two measurements for all patients, nans if weren't measured
+    pao4 = np.array([row[:,PAO2_VAR] for row in X_raw])
+    fio2 = np.array([row[:,FIO2_VAR] for row in X_raw])
+
+    # Determine which patients have at least one non-nan in the same place
+    # in both PaO4 and FiO2 so we can compute the ratio
+    #
+    # This is not all that pretty since each patient may have a different number
+    # of measurements (i.e. not 2D but a numpy array of variable-length arrays)
+    has_measurement = np.zeros((len(pao4)), dtype=np.bool)
+    has_lt_300 = np.zeros((len(pao4)), dtype=np.bool)
+    assert len(pao4) == len(fio2), "Different length PaO4 and FiO2 arrays"
+    for i in range(len(pao4)):
+        # Set to 1 if both have at least one position with a non-nan
+        has_measurement[i] = np.max(~(np.isnan(pao4[i])|np.isnan(fio2[i])))
+
+        if has_measurement[i]:
+            # If measurement, set to 1 if min ratio <300 at least once
+            # Turns out, this is actually *all* of the ones that have a
+            # measurement
+            has_lt_300[i] = np.nanmin(pao4[i]/fio2[i]) < 300
+
+    # Get diagnosis codes to determine if related to heart attack, which we will
+    # exclude. See: 8_processing.nbconvert.ipynb and Wikipedia's list of
+    # categories: https://en.wikipedia.org/wiki/List_of_ICD-9_codes
+    # Important part: 6 is circulatory, so exclude those
+    #
+    # Doesn't work. Maybe see: Major et al. "Reusable Filtering Functions for
+    # Application in ICU data: a case study"
+    CIRCULATORY = 6
+    RESPIRATORY = 7
+
+    label_icd9_all = np.empty([0], dtype=object)
+    label_icd9_all = np.concatenate((label_icd9_all, np.load(icd9_filename)))
+    label_icd9_all = label_icd9_all[idx_x]
+    # Each item in the list is: [aid,icd,numstr,category]
+    # Get only those patients without a 6 in the list
+    no_heart_problem = np.zeros((len(label_icd9_all)), dtype=np.bool)
+    respiratory_problem = np.zeros((len(label_icd9_all)), dtype=np.bool)
+    for i in range(len(label_icd9_all)):
+        category = np.array(label_icd9_all[i])[:,3].astype(int)
+        no_heart_problem[i] = CIRCULATORY not in category
+        respiratory_problem[i] = RESPIRATORY in category
+
+    # TODO even with either no_heart_problem or respiratory_problem, the numbers
+    # still don't match.
+
     # Groups have roughly the same percentages as mentioned in paper
+    # Sanity check lengths against what paper states:
+    #    len(group2[0]),len(group3[0]),len(group4[0]),len(group5[0])
     #
     # Group 2: working-age adult (20 to 45 yrs, 508 patients)
-    group2 = np.where((age >= 20) & (age < 45)) # actually 4946
+    group2 = np.where((age >= 20) & (age < 45) & has_lt_300) # actually 889
     # Group 3: old working-age adult (46 to 65 yrs, 1888 patients)
-    group3 = np.where((age >= 45) & (age < 65)) # actually 11953
+    group3 = np.where((age >= 45) & (age < 65) & has_lt_300) # actually 2680
     # Group 4: elderly (66 to 85 yrs, 2394 patients)
-    group4 = np.where((age >= 65) & (age < 85)) # actually 14690
-    # Group 5: old elderly (85 yrs and up, 437 patients).
-    group5 = np.where((age >= 85)) # actually 3750
+    group4 = np.where((age >= 65) & (age < 85) & has_lt_300) # actually 3402
+    # Group 5: old elderly (85 yrs and up, 437 patients)
+    group5 = np.where((age >= 85) & has_lt_300) # actually 469
+
+    # Sanity check, this should give 13.84% as stated in the paper, the
+    # total mortality rate for the entire adult AHRF dataset.
+    #     from functools import reduce
+    #     a=reduce(np.union1d, (group2,group3,group4,group5))
+    #     np.sum(y[a])/len(y[a])
+
+    # TODO also check the percentages of *each fold* since we're only using fold 0
+    # which may drastically differ since the folds weren't created taking into
+    # consideration AHRF!
 
     # R-DANN should get ~0.821 accuracy and VRADA 0.770
     domain_a = group4
@@ -285,6 +407,103 @@ def load_data_mimiciii(data_filename, folds_filename, folds_stat_filename=None,
     training_folds = folds_file['folds_ep_mor'][label_type,0,:,TRAINING]
     #validation_folds = folds_file['folds_ep_mor'][label_type,0,:,VALIDATION]
     testing_folds = folds_file['folds_ep_mor'][label_type,0,:,TESTING]
+
+    training_indices = training_folds[fold]
+    #validation_indices = validation_folds[fold]
+    testing_indices = testing_folds[fold]
+
+    # Split data
+    train_data_a = x[np.intersect1d(domain_a, training_indices)]
+    train_labels_a = y[np.intersect1d(domain_a, training_indices)]
+    test_data_a = x[np.intersect1d(domain_a, testing_indices)]
+    test_labels_a = y[np.intersect1d(domain_a, testing_indices)]
+    train_data_b = x[np.intersect1d(domain_b, training_indices)]
+    train_labels_b = y[np.intersect1d(domain_b, training_indices)]
+    test_data_b = x[np.intersect1d(domain_b, testing_indices)]
+    test_labels_b = y[np.intersect1d(domain_b, testing_indices)]
+
+    return train_data_a, train_labels_a, \
+        test_data_a, test_labels_a, \
+        train_data_b, train_labels_b, \
+        test_data_b, test_labels_b
+
+def load_data_mimiciii_icd9(data_path="datasets/process-mimic-iii/Data/admdata_99p",
+    hrs=48, fold=0):
+    """
+    Load MIMIC-III time-series data:
+    domain adaptation on age for predicting mortality of adult AHRF patients
+
+    - data_path = where 24hrs, 48hrs, series, etc. folders are
+    - hrs = 24 or 48, depending on which data you want to use
+    - We won't use folds at the moment except to pick data in the training vs.
+      testing sets. We'll use validation as the testing set.
+    - not using fold stats at the moment
+    - not doing cross validation at the moment, so just pick a fold to use
+    - our domains will be based on age, similar to the paper
+
+    Based on: https://github.com/USC-Melady/Benchmarking_DL_MIMICIII/blob/master/Codes/DeepLearningModels/python/betterlearner.py
+    """
+    data_filename = os.path.join(data_path, "%dhrs_raw" % hrs,
+        "series", "imputed-normed-ep_1_%d.npz" % hrs)
+    folds_filename = os.path.join(data_path, "%dhrs_raw" % hrs,
+        "series", "5-folds.npz")
+
+    # TODO create dataset for the above
+
+    # Load all the required .npz files
+    data_file = np.load(data_filename)
+    folds_file = np.load(folds_filename)
+
+    # Get time-series data and labels
+    adm_labels = data_file['adm_labels_all']
+    y = data_file['y_icd9']
+    x = data_file['ep_tdata']
+
+    # non-time-series data -- shape = [admid, features=5]
+    # the 5 features:
+    #   - age(days)
+    #   - acquired immunodeficiency syndrome
+    #   - hematologic malignancy
+    #   - metastatic cancer
+    #   - admission type
+    adm_features = data_file['adm_features_all']
+    age = adm_features[:,0] / 365.25
+
+    # Get rid of Nans that cause training problems
+    adm_features[np.isinf(adm_features)] = 0
+    adm_features[np.isnan(adm_features)] = 0
+    x[np.isinf(x)] = 0
+    x[np.isnan(x)] = 0
+
+    # Groups have roughly the same percentages as mentioned in paper
+    # Sanity check lengths against what paper states:
+    #    len(group2[0]),len(group3[0]),len(group4[0]),len(group5[0])
+    #
+    # Group 2: working-age adult (20 to 45 yrs)
+    group2 = np.where((age >= 20) & (age < 45)) # 4586
+    # Group 3: old working-age adult (46 to 65 yrs)
+    group3 = np.where((age >= 45) & (age < 65)) # 11509
+    # Group 4: elderly (66 to 85 yrs)
+    group4 = np.where((age >= 65) & (age < 85)) # 14262
+    # Group 5: old elderly (85 yrs and up)
+    group5 = np.where((age >= 85)) # 3597
+
+    # Sanity check, we should have a total of 19714 as stated in the paper.
+    #     from functools import reduce
+    #     len(reduce(np.union1d, (group2,group3,group4,group5)))
+
+    # R-DANN should get ~0.616 AUC and VRADA ~0.623 on test set
+    domain_a = group4
+    domain_b = group3
+
+    # Get the information about the folds
+    TRAINING = 0
+    #VALIDATION = 1
+    TESTING = 2
+
+    training_folds = folds_file['folds_ep_mor'][0,0,:,TRAINING]
+    #validation_folds = folds_file['folds_ep_mor'][0,0,:,VALIDATION]
+    testing_folds = folds_file['folds_ep_mor'][0,0,:,TESTING]
 
     training_indices = training_folds[fold]
     #validation_indices = validation_folds[fold]

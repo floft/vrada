@@ -3,7 +3,7 @@
 #SBATCH --output=slurm_logs/mimic_%j.out
 #SBATCH --error=slurm_logs/mimic_%j.err
 #SBATCH --ntasks=1
-#SBATCH --cpus-per-task=23
+#SBATCH --cpus-per-task=24
 #SBATCH --nodes=1-1
 #SBATCH --gres=gpu:tesla:0
 #SBATCH --partition=taylor,kamiak,cahnrs_gpu,free_gpu,vcea,cahnrs,cahnrs_bigmem
@@ -32,8 +32,10 @@ function clean_up
 		kill $postgres_pid
     fi
 
-	#echo "Removing database from memory"
-    #rm -rf "$tmpdir"
+    # Note: if you're debugging stuff, comment this out and delete it manually
+    # once you're done.
+	echo "Removing database from memory"
+    rm -rf "$tmpdir"
     exit
 }
 

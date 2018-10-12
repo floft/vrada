@@ -26,18 +26,18 @@ from model import build_lstm, build_vrnn
 from load_data import IteratorInitializerHook, \
     load_data, one_hot, \
     domain_labels, _get_input_fn, \
-    load_data_sleep, load_data_mimiciii
+    load_data_sleep, load_data_mimiciii_ahrf, load_data_mimiciii_icd9
 
-def evaluation_accuracy(sess,
+def compute_evaluation(sess,
     eval_input_hook_a, eval_input_hook_b,
     next_data_batch_test_a, next_labels_batch_test_a,
     next_data_batch_test_b, next_labels_batch_test_b,
     task_accuracy_sum, domain_accuracy_sum,
     source_domain, target_domain,
-    x, y, domain, keep_prob, training,
+    x, y, task_classifier, domain, keep_prob, training,
     batch_size):
     """
-    Run all the evaluation data to calculate accuracy
+    Run all the evaluation data to calculate accuracy and AUC
 
     We may not be able to fit all the evaluation data into memory, so we'll
     loop over it in batches and at the end calculate the accuracy.
@@ -50,6 +50,12 @@ def evaluation_accuracy(sess,
     domain_b = 0
     a_total = 0
     b_total = 0
+
+    # For AUC, we need to keep track of all the predictions
+    auc_a_labels = None
+    auc_a_predictions = None
+    auc_b_labels = None
+    auc_b_predictions = None
 
     # Reinitialize the evaluation batch initializers so we start at
     # the beginning of the evaluation data again
@@ -75,23 +81,36 @@ def evaluation_accuracy(sess,
                 batch_target_domain = target_domain
 
             # Log summaries run on the evaluation/validation data
-            batch_task_a, batch_domain_a = sess.run(
-                [task_accuracy_sum, domain_accuracy_sum], feed_dict={
+            batch_task_a, batch_domain_a, pred_a = sess.run(
+                [task_accuracy_sum, domain_accuracy_sum, task_classifier], feed_dict={
                 x: eval_data_a, y: eval_labels_a, domain: batch_source_domain,
                 keep_prob: 1.0, training: False
             })
-            batch_task_b, batch_domain_b = sess.run(
-                [task_accuracy_sum, domain_accuracy_sum], feed_dict={
+            batch_task_b, batch_domain_b, pred_b = sess.run(
+                [task_accuracy_sum, domain_accuracy_sum, task_classifier], feed_dict={
                 x: eval_data_b, y: eval_labels_b, domain: batch_target_domain,
                 keep_prob: 1.0, training: False
             })
 
+            # Update sums for computing accuracy
             task_a += batch_task_a
             task_b += batch_task_b
             domain_a += batch_domain_a
             domain_b += batch_domain_b
             a_total += eval_data_a.shape[0]
             b_total += eval_data_b.shape[0]
+
+            # Save predictions for computing AUC
+            if auc_a_labels is None:
+                auc_a_labels = np.copy(eval_labels_a)
+                auc_a_predictions = np.copy(pred_a)
+                auc_b_labels = np.copy(eval_labels_b)
+                auc_b_predictions = np.copy(task_classifier)
+            else:
+                auc_a_labels = np.vstack([auc_a_labels, eval_labels_a])
+                auc_a_predictions = np.vstack([auc_a_predictions, pred_a])
+                auc_b_labels = np.vstack([auc_b_labels, eval_labels_b])
+                auc_b_predictions = np.vstack([auc_b_predictions, pred_b])
         except tf.errors.OutOfRangeError:
             break
 
@@ -100,8 +119,22 @@ def evaluation_accuracy(sess,
     task_b_accuracy = task_b / b_total
     domain_b_accuracy = domain_b / b_total
 
+    # New graph just for computing AUC
+    with tf.Session() as sess:
+        # Input Numpy arrays to TF
+        auc_a_labels = tf.convert_to_tensor(auc_a_labels, np.float32)
+        auc_a_predictions = tf.convert_to_tensor(auc_a_predictions, np.float32)
+        auc_b_labels = tf.convert_to_tensor(auc_b_labels, np.float32)
+        auc_b_predictions = tf.convert_to_tensor(auc_b_predictions, np.float32)
+        # AUC
+        task_a_auc = tf.metrics.auc(labels=auc_a_labels, predictions=auc_a_predictions)
+        task_b_auc = tf.metrics.auc(labels=auc_b_labels, predictions=auc_b_predictions)
+        # Run
+        task_a_auc, task_b_auc = sess.run([task_a_auc, task_b_auc])
+
     return task_a_accuracy, domain_a_accuracy, \
-        task_b_accuracy, domain_b_accuracy
+        task_b_accuracy, domain_b_accuracy, \
+        task_a_auc, task_b_auc
 
 def evaluation_plots(sess,
     eval_input_hook_a, eval_input_hook_b,
@@ -213,7 +246,8 @@ def train(data_info,
         model_save_steps=1000,
         log_save_steps=50,
         log_extra_save_steps=250,
-        adaptation=True):
+        adaptation=True,
+        multi_class=False):
 
     if not os.path.exists(model_dir):
         os.makedirs(model_dir)
@@ -265,7 +299,7 @@ def train(data_info,
     task_classifier, domain_classifier, total_loss, \
     feature_extractor, model_summaries, extra_model_outputs = \
         model_func(x, y, domain, grl_lambda, keep_prob, training,
-            num_classes, num_features, adaptation, units)
+            num_classes, num_features, adaptation, units, multi_class)
 
     # Accuracy of the classifiers -- https://stackoverflow.com/a/42608050/2698494
     #
@@ -284,6 +318,12 @@ def train(data_info,
         tf.float32)
         domain_accuracy_sum = tf.reduce_sum(equals)
         domain_accuracy = tf.reduce_mean(equals)
+
+    # The task accuracy above doesn't really make sense when there's multiple
+    # predicted classes (if multi_class==True), so we'll also compute AUC, which
+    # will be more useful
+    with tf.variable_scope("task_auc"):
+        task_auc = tf.metrics.auc(labels=y, predictions=task_classifier)
 
     # Get variables of model - needed if we train in two steps
     variables = tf.trainable_variables()
@@ -306,11 +346,13 @@ def train(data_info,
     # Summaries - training and evaluation for both domains A and B
     training_summaries_a = tf.summary.merge([
         tf.summary.scalar("loss/total_loss", total_loss),
+        tf.summary.scalar("auc_task/source/training", task_auc),
         tf.summary.scalar("accuracy_task/source/training", task_accuracy),
         tf.summary.scalar("accuracy_domain/source/training", domain_accuracy),
     ])
     training_summaries_extra_a = tf.summary.merge(model_summaries)
     training_summaries_b = tf.summary.merge([
+        tf.summary.scalar("auc_task/target/training", task_auc),
         tf.summary.scalar("accuracy_task/target/training", task_accuracy),
         tf.summary.scalar("accuracy_domain/target/training", domain_accuracy)
     ])
@@ -415,13 +457,14 @@ def train(data_info,
 
                 # Evaluation accuracy
                 task_a_accuracy, domain_a_accuracy, \
-                task_b_accuracy, domain_b_accuracy = evaluation_accuracy(sess,
+                task_b_accuracy, domain_b_accuracy, \
+                task_a_auc, task_b_auc = compute_evaluation(sess,
                     eval_input_hook_a, eval_input_hook_b,
                     next_data_batch_test_a, next_labels_batch_test_a,
                     next_data_batch_test_b, next_labels_batch_test_b,
                     task_accuracy_sum, domain_accuracy_sum,
                     source_domain, target_domain,
-                    x, y, domain, keep_prob, training,
+                    x, y, task_classifier, domain, keep_prob, training,
                     batch_size)
 
                 task_source_val = tf.Summary(value=[tf.Summary.Value(
@@ -432,6 +475,10 @@ def train(data_info,
                     tag="accuracy_domain/source/validation",
                     simple_value=domain_a_accuracy
                 )])
+                task_source_auc_val = tf.Summary(value=[tf.Summary.Value(
+                    tag="auc_task/source/validation",
+                    simple_value=task_a_auc
+                )])
                 task_target_val = tf.Summary(value=[tf.Summary.Value(
                     tag="accuracy_task/target/validation",
                     simple_value=task_b_accuracy
@@ -440,10 +487,16 @@ def train(data_info,
                     tag="accuracy_domain/target/validation",
                     simple_value=domain_b_accuracy
                 )])
+                task_target_auc_val = tf.Summary(value=[tf.Summary.Value(
+                    tag="auc_task/target/validation",
+                    simple_value=task_b_auc
+                )])
                 writer.add_summary(task_source_val, step)
                 writer.add_summary(domain_source_val, step)
+                writer.add_summary(task_source_auc_val, step)
                 writer.add_summary(task_target_val, step)
                 writer.add_summary(domain_target_val, step)
+                writer.add_summary(task_target_auc_val, step)
 
                 # t-SNE, PCA, and VRNN reconstruction plots
                 plots = evaluation_plots(sess,
@@ -509,10 +562,14 @@ if __name__ == '__main__':
         help="Use VRNN-DA model")
     parser.add_argument('--no-vrnn-da', dest='vrnn_da', action='store_false',
         help="Do not use VRNN-DA model (default)")
-    parser.add_argument('--mimic', dest='mimic', action='store_true',
-        help="Run on the MIMIC-III dataset")
-    parser.add_argument('--no-mimic', dest='mimic', action='store_false',
-        help="Do not run on the MIMIC-III dataset (default)")
+    parser.add_argument('--mimic-icd9', dest='mimic_icd9', action='store_true',
+        help="Run on the MIMIC-III ICD-9 code prediction dataset")
+    parser.add_argument('--no-mimic-icd9', dest='mimic_icd9', action='store_false',
+        help="Do not run on the MIMIC-III ICD-9 code prediction dataset (default)")
+    parser.add_argument('--mimic-ahrf', dest='mimic_ahrf', action='store_true',
+        help="Run on the MIMIC-III Adult AHRF dataset (warning: not correct)")
+    parser.add_argument('--no-mimic-ahrf', dest='mimic_ahrf', action='store_false',
+        help="Do not run on the MIMIC-III Adult AHRF dataset (default)")
     parser.add_argument('--sleep', dest='sleep', action='store_true',
         help="Run on the RF sleep stage dataset")
     parser.add_argument('--no-sleep', dest='sleep', action='store_false',
@@ -550,12 +607,14 @@ if __name__ == '__main__':
             +"(Don't pass both this and --debug at the same time.)")
     parser.set_defaults(
         lstm=False, vrnn=False, lstm_da=False, vrnn_da=False,
-        mimic=False, sleep=False, trivial_line=False, trivial_sine=False,
-        debug=False)
+        mimic_ahrf=False, mimic_icd9=False, sleep=False, trivial_line=False,
+        trivial_sine=False, debug=False)
     args = parser.parse_args()
 
     # Load datasets - domains A & B
-    assert args.mimic + args.sleep + args.trivial_line + args.trivial_sine == 1, \
+    assert args.mimic_ahrf + args.mimic_icd9 + \
+        + args.sleep \
+        + args.trivial_line + args.trivial_sine == 1, \
         "Must specify exactly one dataset to use"
 
     if args.trivial_line:
@@ -571,6 +630,7 @@ if __name__ == '__main__':
         time_steps = train_data_a.shape[1]
         num_classes = len(np.unique(train_labels_a))
         data_info = (time_steps, num_features, num_classes)
+        multi_class = False # Predict only one class
     elif args.trivial_sine:
         # Change in y-intercept
         train_data_a, train_labels_a = load_data("datasets/trivial/positive_sine_TRAIN")
@@ -584,6 +644,7 @@ if __name__ == '__main__':
         time_steps = train_data_a.shape[1]
         num_classes = len(np.unique(train_labels_a))
         data_info = (time_steps, num_features, num_classes)
+        multi_class = False # Predict only one class
     elif args.sleep:
         train_data_a, train_labels_a, \
         test_data_a, test_labels_a, \
@@ -596,21 +657,35 @@ if __name__ == '__main__':
         time_steps = train_data_a.shape[1]
         num_classes = len(np.unique(train_labels_a))
         data_info = (time_steps, num_features, num_classes)
-    elif args.mimic:
-        data_path = "datasets/process-mimic-iii/Data/admdata_17f/24hrs/series/"
+        multi_class = False # Predict only one class
+    elif args.mimic_ahrf:
         train_data_a, train_labels_a, \
         test_data_a, test_labels_a, \
         train_data_b, train_labels_b, \
-        test_data_b, test_labels_b = load_data_mimiciii(
-            data_filename=os.path.join(data_path, "imputed-normed-ep_1_24.npz"),
-            folds_filename=os.path.join(data_path, "5-folds.npz"))
+        test_data_b, test_labels_b = load_data_mimiciii_ahrf()
 
         # Information about dataset
         index_one = False # Labels start from 0
         num_features = train_data_a.shape[2]
         time_steps = train_data_a.shape[1]
         num_classes = len(np.unique(train_labels_a))
+        assert num_classes == 2, "Should be 2 classes (binary) for MIMIC-III AHRF"
         data_info = (time_steps, num_features, num_classes)
+        multi_class = False # Predict only one class
+    else: # args.mimic_icd9
+        train_data_a, train_labels_a, \
+        test_data_a, test_labels_a, \
+        train_data_b, train_labels_b, \
+        test_data_b, test_labels_b = load_data_mimiciii_icd9()
+
+        # Information about dataset
+        index_one = False # Labels start from 0
+        num_features = train_data_a.shape[2]
+        time_steps = train_data_a.shape[1]
+        num_classes = len(np.unique(train_labels_a))
+        assert num_classes == 20, "Should be 20 ICD-9 categories"
+        data_info = (time_steps, num_features, num_classes)
+        multi_class = True # Predict any number of the classes at once
 
     # One-hot encoding
     train_data_a, train_labels_a = one_hot(train_data_a, train_labels_a, num_classes, index_one)
@@ -676,4 +751,5 @@ if __name__ == '__main__':
             dropout_keep_prob=args.dropout,
             model_save_steps=args.model_steps,
             log_save_steps=args.log_steps,
-            log_extra_save_steps=args.log_steps_slow)
+            log_extra_save_steps=args.log_steps_slow,
+            multi_class=multi_class)
