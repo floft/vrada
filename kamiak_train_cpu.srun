@@ -81,10 +81,13 @@ echo "Getting data: done"
 
 # Install dependencies
 echo "Making sure TensorFlow installed: starting"
-pip install --user virtualenv
-virtualenv tensorflow_cpu
-source tensorflow_cpu/bin/activate
-pip install tensorflow pillow lxml jupyter matplotlib pandas sklearn scipy
+pip install --user virtualenvwrapper
+export VIRTUALENVWRAPPER_PYTHON="$(which python3)"
+export WORKON_HOME=~/Envs
+source ~/.local/bin/virtualenvwrapper.sh
+mkvirtualenv -p python3 tensorflow_cpu
+# Seems to hang on numpy without --no-cache-dir?
+pip --no-cache-dir install tensorflow pillow lxml jupyter matplotlib pandas sklearn scipy
 echo "Making sure TensorFlow installed: done"
 
 # Train
