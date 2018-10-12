@@ -323,6 +323,7 @@ def train(data_info,
 
         task_accuracy_sum = tf.reduce_sum(equals, axis=0)
         task_accuracy = tf.reduce_mean(equals, axis=0)
+        task_accuracy_avg = tf.reduce_mean(task_accuracy)
     with tf.variable_scope("domain_accuracy"):
         equals = tf.cast(
             tf.equal(tf.argmax(domain, axis=-1), tf.argmax(domain_classifier, axis=-1)),
@@ -361,10 +362,12 @@ def train(data_info,
     training_a_summs = [
         tf.summary.scalar("loss/total_loss", total_loss),
         tf.summary.scalar("auc_task/source/training", task_auc),
+        tf.summary.scalar("accuracy_task_mean/source/training", task_accuracy_avg),
         tf.summary.scalar("accuracy_domain/source/training", domain_accuracy),
     ]
     training_b_summs = [
         tf.summary.scalar("auc_task/target/training", task_auc),
+        tf.summary.scalar("accuracy_task_mean/target/training", task_accuracy_avg),
         tf.summary.scalar("accuracy_domain/target/training", domain_accuracy)
     ]
     for i in range(num_classes):
@@ -490,6 +493,10 @@ def train(data_info,
                         tag="accuracy_task_%d/source/validation" % i,
                         simple_value=task_a_accuracy[i]
                     )])]
+                task_source_val_avg = tf.Summary(value=[tf.Summary.Value(
+                        tag="accuracy_task_mean/source/validation",
+                        simple_value=np.mean(task_a_accuracy)
+                    )])
                 domain_source_val = tf.Summary(value=[tf.Summary.Value(
                     tag="accuracy_domain/source/validation",
                     simple_value=domain_a_accuracy
@@ -504,6 +511,10 @@ def train(data_info,
                         tag="accuracy_task_%d/target/validation" % i,
                         simple_value=task_b_accuracy[i]
                     )])]
+                task_target_val_avg = tf.Summary(value=[tf.Summary.Value(
+                        tag="accuracy_task_mean/target/validation",
+                        simple_value=np.mean(task_b_accuracy)
+                    )])
                 domain_target_val = tf.Summary(value=[tf.Summary.Value(
                     tag="accuracy_domain/target/validation",
                     simple_value=domain_b_accuracy
@@ -514,10 +525,12 @@ def train(data_info,
                 )])
                 for s in task_source_val:
                     writer.add_summary(s, step)
+                writer.add_summary(task_source_val_avg, step)
                 writer.add_summary(domain_source_val, step)
                 writer.add_summary(task_source_auc_val, step)
                 for s in task_target_val:
                     writer.add_summary(s, step)
+                writer.add_summary(task_target_val_avg, step)
                 writer.add_summary(domain_target_val, step)
                 writer.add_summary(task_target_auc_val, step)
 
