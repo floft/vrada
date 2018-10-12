@@ -362,24 +362,24 @@ def train(data_info,
     training_a_summs = [
         tf.summary.scalar("loss/total_loss", total_loss),
         tf.summary.scalar("auc_task/source/training", task_auc),
-        tf.summary.scalar("accuracy_task_mean/source/training", task_accuracy_avg),
+        tf.summary.scalar("accuracy_task_avg/source/training", task_accuracy_avg),
         tf.summary.scalar("accuracy_domain/source/training", domain_accuracy),
     ]
     training_b_summs = [
         tf.summary.scalar("auc_task/target/training", task_auc),
-        tf.summary.scalar("accuracy_task_mean/target/training", task_accuracy_avg),
+        tf.summary.scalar("accuracy_task_avg/target/training", task_accuracy_avg),
         tf.summary.scalar("accuracy_domain/target/training", domain_accuracy)
     ]
-    for i in range(num_classes):
-        with tf.variable_scope("task_accuracy"):
+    with tf.variable_scope("task_accuracy", auxiliary_name_scope=False):
+        for i in range(num_classes):
             class_acc = tf.reshape(tf.slice(task_accuracy, [i], [1]), [])
 
-        training_a_summs += [
-            tf.summary.scalar("accuracy_task_%d/source/training" % i, class_acc),
-        ]
-        training_b_summs += [
-            tf.summary.scalar("accuracy_task_%d/target/training" % i, class_acc),
-        ]
+            training_a_summs += [
+                tf.summary.scalar("accuracy_task_class%d/source/training" % i, class_acc),
+            ]
+            training_b_summs += [
+                tf.summary.scalar("accuracy_task_class%d/target/training" % i, class_acc),
+            ]
     training_summaries_a = tf.summary.merge(training_a_summs)
     training_summaries_extra_a = tf.summary.merge(model_summaries)
     training_summaries_b = tf.summary.merge(training_b_summs)
@@ -490,11 +490,11 @@ def train(data_info,
                 task_source_val = []
                 for i in range(num_classes):
                     task_source_val += [tf.Summary(value=[tf.Summary.Value(
-                        tag="accuracy_task_%d/source/validation" % i,
+                        tag="accuracy_task_class%d/source/validation" % i,
                         simple_value=task_a_accuracy[i]
                     )])]
                 task_source_val_avg = tf.Summary(value=[tf.Summary.Value(
-                        tag="accuracy_task_mean/source/validation",
+                        tag="accuracy_task_avg/source/validation",
                         simple_value=np.mean(task_a_accuracy)
                     )])
                 domain_source_val = tf.Summary(value=[tf.Summary.Value(
@@ -508,11 +508,11 @@ def train(data_info,
                 task_target_val = []
                 for i in range(num_classes):
                     task_target_val += [tf.Summary(value=[tf.Summary.Value(
-                        tag="accuracy_task_%d/target/validation" % i,
+                        tag="accuracy_task_class%d/target/validation" % i,
                         simple_value=task_b_accuracy[i]
                     )])]
                 task_target_val_avg = tf.Summary(value=[tf.Summary.Value(
-                        tag="accuracy_task_mean/target/validation",
+                        tag="accuracy_task_avg/target/validation",
                         simple_value=np.mean(task_b_accuracy)
                     )])
                 domain_target_val = tf.Summary(value=[tf.Summary.Value(
