@@ -247,7 +247,8 @@ def train(data_info,
         log_validation_accuracy_steps=250,
         log_extra_save_steps=1000,
         adaptation=True,
-        multi_class=False):
+        multi_class=False,
+        class_weights=1.0):
 
     if not os.path.exists(model_dir):
         os.makedirs(model_dir)
@@ -299,7 +300,8 @@ def train(data_info,
     task_classifier, domain_classifier, total_loss, \
     feature_extractor, model_summaries, extra_model_outputs = \
         model_func(x, y, domain, grl_lambda, keep_prob, training,
-            num_classes, num_features, adaptation, units, multi_class)
+            num_classes, num_features, adaptation, units, multi_class,
+            class_weights)
 
     # Accuracy of the classifiers -- https://stackoverflow.com/a/42608050/2698494
     #
@@ -679,6 +681,7 @@ if __name__ == '__main__':
         num_classes = len(np.unique(train_labels_a))
         data_info = (time_steps, num_features, num_classes)
         multi_class = False # Predict only one class
+        class_weights = 1.0 # Already balanced
     elif args.trivial_sine:
         # Change in y-intercept
         train_data_a, train_labels_a = load_data("datasets/trivial/positive_sine_TRAIN")
@@ -693,6 +696,7 @@ if __name__ == '__main__':
         num_classes = len(np.unique(train_labels_a))
         data_info = (time_steps, num_features, num_classes)
         multi_class = False # Predict only one class
+        class_weights = 1.0 # Already balanced
     elif args.sleep:
         train_data_a, train_labels_a, \
         test_data_a, test_labels_a, \
@@ -706,6 +710,7 @@ if __name__ == '__main__':
         num_classes = len(np.unique(train_labels_a))
         data_info = (time_steps, num_features, num_classes)
         multi_class = False # Predict only one class
+        class_weights = 1.0 # Probably balanced? Didn't check.
     elif args.mimic_ahrf:
         train_data_a, train_labels_a, \
         test_data_a, test_labels_a, \
@@ -716,10 +721,14 @@ if __name__ == '__main__':
         index_one = False # Labels start from 0
         num_features = train_data_a.shape[2]
         time_steps = train_data_a.shape[1]
-        num_classes = len(np.unique(train_labels_a))
+        unique, counts = np.unique(train_labels_a, return_counts=True)
+        num_classes = len(unique)
         assert num_classes == 2, "Should be 2 classes (binary) for MIMIC-III AHRF"
         data_info = (time_steps, num_features, num_classes)
         multi_class = False # Predict only one class
+
+        # Due to the large class imbalance, we should weight the + class more
+        class_weights = len(train_labels_a)/counts # i.e. 1/(counts/len)
     else: # args.mimic_icd9
         train_data_a, train_labels_a, \
         test_data_a, test_labels_a, \
@@ -734,6 +743,15 @@ if __name__ == '__main__':
         assert num_classes == 20, "Should be 20 ICD-9 categories"
         data_info = (time_steps, num_features, num_classes)
         multi_class = True # Predict any number of the classes at once
+
+        # Again, handle large class imbalance
+        num_each_label = np.sum(train_labels_a, axis=0)
+        total = len(train_labels_a)
+        class_weights = total/num_each_label
+
+        # Get rid of nan/inf
+        class_weights[np.isnan(class_weights)] = 1.0
+        class_weights[np.isinf(class_weights)] = 1.0
 
     # One-hot encoding
     train_data_a, train_labels_a = one_hot(train_data_a, train_labels_a, num_classes, index_one)
@@ -801,4 +819,5 @@ if __name__ == '__main__':
             log_save_steps=args.log_steps,
             log_validation_accuracy_steps=args.log_steps_val,
             log_extra_save_steps=args.log_steps_slow,
-            multi_class=multi_class)
+            multi_class=multi_class,
+            class_weights=class_weights)

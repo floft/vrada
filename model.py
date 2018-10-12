@@ -70,8 +70,8 @@ def classifier(x, num_classes, keep_prob, training, batch_norm):
     return classifier_output, softmax_output, sigmoid_output
 
 def build_model(x, y, domain, grl_lambda, keep_prob, training,
-        num_classes, adaptation=True, multi_class=False, batch_norm=False,
-        two_domain_classifiers=False, log_outputs=True):
+        num_classes, adaptation=True, multi_class=False, class_weights=1.0,
+        batch_norm=False, two_domain_classifiers=False, log_outputs=True):
     """
     Creates the feature extractor, task classifier, domain classifier
 
@@ -83,8 +83,14 @@ def build_model(x, y, domain, grl_lambda, keep_prob, training,
         keep_prob -- float placeholder for dropout probability
         training -- boolean placeholder for if we're training
         adaptation -- boolean whether we wish to perform adaptation or not
+        multi_class -- boolean whether to use sigmoid (for multi-class) or softmax
+        batch_norm -- boolean whether to use BatchNorm
+        two_domain_classifiers -- an experiment, not recommended to use
+        log_outputs -- boolean whether we want to log outputs to for TensorBoard
+        class_weights -- weights for handling large class imbalances (probably
+            pass in [class0_weight, class1_weight, ... classN_weight])
     Outputs:
-        task_softmax, domain_softmax -- predictions of classifiers
+        task_output, domain_softmax -- predictions of classifiers
         task_loss, domain_loss -- losses
         feature_extractor -- output of feature extractor (e.g. for t-SNE)
         summaries -- more summaries to save
@@ -162,19 +168,18 @@ def build_model(x, y, domain, grl_lambda, keep_prob, training,
         # just one), use a different TensorFlow loss function that treats each
         # output separately (not doing softmax, where we care about the max one)
         if multi_class:
-            task_loss = tf.reduce_mean(tf.nn.sigmoid_cross_entropy_with_logits(
-                labels=tf.stop_gradient(y), logits=task_classifier))
+            task_loss = tf.losses.sigmoid_cross_entropy(
+                y, task_classifier, class_weights)
         else:
-            task_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(
-                labels=tf.stop_gradient(y), logits=task_classifier))
+            task_loss = tf.losses.softmax_cross_entropy(
+                y, task_classifier, class_weights)
 
     with tf.variable_scope("domain_loss"):
-        domain_loss = tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(
-            labels=tf.stop_gradient(domain), logits=domain_classifier))
+        domain_loss = tf.losses.softmax_cross_entropy(domain, domain_classifier)
 
         if two_domain_classifiers:
-            domain_loss += tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(
-                labels=tf.stop_gradient(domain), logits=domain_classifier2))
+            domain_loss += tf.losses.softmax_cross_entropy(
+                domain, domain_classifier2)
 
     # If multi-class the task output will be sigmoid rather than softmax
     if multi_class:
@@ -206,7 +211,7 @@ def build_model(x, y, domain, grl_lambda, keep_prob, training,
 
 def build_lstm(x, y, domain, grl_lambda, keep_prob, training,
             num_classes, num_features, adaptation, units,
-            multi_class=False):
+            multi_class=False, class_weights=1.0):
     """ LSTM for a baseline """
     # Build LSTM
     with tf.variable_scope("rnn_model"):
@@ -221,7 +226,7 @@ def build_lstm(x, y, domain, grl_lambda, keep_prob, training,
     task_output, domain_softmax, task_loss, domain_loss, \
         feature_extractor, summaries = build_model(
             rnn_output, y, domain, grl_lambda, keep_prob, training,
-            num_classes, adaptation, multi_class)
+            num_classes, adaptation, multi_class, class_weights)
 
     # Total loss is the sum
     with tf.variable_scope("total_loss"):
@@ -238,7 +243,8 @@ def build_lstm(x, y, domain, grl_lambda, keep_prob, training,
 
 def build_vrnn(x, y, domain, grl_lambda, keep_prob, training,
             num_classes, num_features, adaptation, units,
-            multi_class=False, eps=1e-9, use_z=True,
+            multi_class=False, class_weights=1.0,
+            eps=1e-9, use_z=True,
             log_outputs=False, log_weights=False):
     """ VRNN model """
     # Build VRNN
@@ -270,7 +276,7 @@ def build_vrnn(x, y, domain, grl_lambda, keep_prob, training,
     task_output, domain_softmax, task_loss, domain_loss, \
         feature_extractor, summaries = build_model(
             rnn_output, y, domain, grl_lambda, keep_prob, training,
-            num_classes, adaptation, multi_class)
+            num_classes, adaptation, multi_class, class_weights)
 
     # Loss
     #

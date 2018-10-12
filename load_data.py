@@ -269,8 +269,6 @@ def load_data_mimiciii_ahrf(data_path="datasets/process-mimic-iii/Data/admdata_1
     icd9_filename = os.path.join(data_path, "%dhrs" % hrs,
         "ICD9-%dhrs.npy" % hrs)
 
-    # TODO add the DB_merged... and icd9... to the dataset zip file
-
     # Load all the required .npz files
     data_file = np.load(data_filename)
     folds_file = np.load(folds_filename)
