@@ -10,7 +10,7 @@ logFolder="vrada-mimic-icd9-logs"
 #compressedDataset="rfsleep.zip"
 #dataset=("datasets/RFSleep"/*.npy)
 #compressedDataset="mimiciii.zip"
-#dataset=("datasets/process-mimic-iii/Data/admdata_17f/24hrs/series/"/{imputed-normed-ep_1_24.npz,5-folds.npz})
+#dataset=("datasets/process-mimic-iii/Data/admdata_17f/24hrs/"/{series/imputed-normed-ep_1_24.npz,series/5-folds.npz,DB_merged_24hrs.npy,ICD9-24hrs.npy})
 compressedDataset="mimiciii-icd9.zip"
 dataset=("datasets/process-mimic-iii/Data/admdata_99p/48hrs_raw/series/"/{imputed-normed-ep_1_48.npz,5-folds.npz})
 
