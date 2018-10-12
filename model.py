@@ -38,6 +38,8 @@ def classifier(x, num_classes, keep_prob, training, batch_norm):
     Returns both output without applying softmax for use in loss function
     and after for use in prediction. See softmax_cross_entropy_with_logits_v2
     documentation: "This op expects unscaled logits, ..."
+
+    Also returns sigmoid output for if doing multi-class classification.
     """
     classifier_output = x
     num_layers = 4
@@ -62,9 +64,10 @@ def classifier(x, num_classes, keep_prob, training, batch_norm):
             if i != num_layers-1:
                 classifier_output = tf.nn.relu(classifier_output)
 
+    sigmoid_output = tf.nn.sigmoid(classifier_output)
     softmax_output = tf.nn.softmax(classifier_output)
 
-    return classifier_output, softmax_output
+    return classifier_output, softmax_output, sigmoid_output
 
 def build_model(x, y, domain, grl_lambda, keep_prob, training,
         num_classes, adaptation=True, multi_class=False, batch_norm=False,
@@ -105,21 +108,21 @@ def build_model(x, y, domain, grl_lambda, keep_prob, training,
 
     # Pass last output to fully connected then softmax to get class prediction
     with tf.variable_scope("task_classifier"):
-        task_classifier, task_softmax = classifier(
+        task_classifier, task_softmax, task_sigmoid = classifier(
             feature_extractor, num_classes, keep_prob, training, batch_norm)
 
     # Also pass output to domain classifier
     # Note: always have 2 domains, so set outputs to 2
     with tf.variable_scope("domain_classifier"):
         gradient_reversal_layer = flip_gradient(feature_extractor, grl_lambda)
-        domain_classifier, domain_softmax = classifier(
+        domain_classifier, domain_softmax, _ = classifier(
             gradient_reversal_layer, 2, keep_prob, training, batch_norm)
 
     # Maybe try one before the feature extractor too
     if two_domain_classifiers:
         with tf.variable_scope("domain_classifier2"):
             gradient_reversal_layer2 = flip_gradient(x, grl_lambda)
-            domain_classifier2, _ = classifier(
+            domain_classifier2, _, _ = classifier(
                 gradient_reversal_layer2, 2, keep_prob, training, batch_norm)
 
     # If doing domain adaptation, then we'll need to ignore the second half of the
@@ -146,6 +149,9 @@ def build_model(x, y, domain, grl_lambda, keep_prob, training,
             task_softmax = tf.cond(training,
                 lambda: tf.slice(task_softmax, [0, 0], [batch_size // 2, -1]),
                 lambda: task_softmax)
+            task_sigmoid = tf.cond(training,
+                lambda: tf.slice(task_sigmoid, [0, 0], [batch_size // 2, -1]),
+                lambda: task_sigmoid)
             y = tf.cond(training,
                 lambda: tf.slice(y, [0, 0], [batch_size // 2, -1]),
                 lambda: y)
@@ -170,6 +176,12 @@ def build_model(x, y, domain, grl_lambda, keep_prob, training,
             domain_loss += tf.reduce_mean(tf.nn.softmax_cross_entropy_with_logits_v2(
                 labels=tf.stop_gradient(domain), logits=domain_classifier2))
 
+    # If multi-class the task output will be sigmoid rather than softmax
+    if multi_class:
+        task_output = task_sigmoid
+    else:
+        task_output = task_softmax
+
     # Extra summaries
     summaries = [
         tf.summary.scalar("loss/task_loss", task_loss),
@@ -185,10 +197,10 @@ def build_model(x, y, domain, grl_lambda, keep_prob, training,
         for i in range(num_classes):
             summaries += [
                 tf.summary.histogram("outputs/task_classifier_%d" % i,
-                    tf.slice(task_softmax, [i], [1]))
+                    tf.slice(task_output, [0,i], [tf.shape(task_output)[0],1]))
             ]
 
-    return task_softmax, domain_softmax, task_loss, domain_loss, \
+    return task_output, domain_softmax, task_loss, domain_loss, \
         feature_extractor, summaries
 
 def build_lstm(x, y, domain, grl_lambda, keep_prob, training,
@@ -205,7 +217,7 @@ def build_lstm(x, y, domain, grl_lambda, keep_prob, training,
         rnn_output = outputs[:, -1]
 
     # Other model components passing in output from RNN
-    task_softmax, domain_softmax, task_loss, domain_loss, \
+    task_output, domain_softmax, task_loss, domain_loss, \
         feature_extractor, summaries = build_model(
             rnn_output, y, domain, grl_lambda, keep_prob, training,
             num_classes, adaptation, multi_class)
@@ -220,7 +232,7 @@ def build_lstm(x, y, domain, grl_lambda, keep_prob, training,
     # We can't generate with an LSTM
     extra_outputs = None
 
-    return task_softmax, domain_softmax, total_loss, \
+    return task_output, domain_softmax, total_loss, \
         feature_extractor, summaries, extra_outputs
 
 def build_vrnn(x, y, domain, grl_lambda, keep_prob, training,
@@ -254,7 +266,7 @@ def build_vrnn(x, y, domain, grl_lambda, keep_prob, training,
             rnn_output = h[:,-1]
 
     # Other model components passing in output from RNN
-    task_softmax, domain_softmax, task_loss, domain_loss, \
+    task_output, domain_softmax, task_loss, domain_loss, \
         feature_extractor, summaries = build_model(
             rnn_output, y, domain, grl_lambda, keep_prob, training,
             num_classes, adaptation, multi_class)
@@ -322,5 +334,5 @@ def build_vrnn(x, y, domain, grl_lambda, keep_prob, training,
         decoder_mu, decoder_sigma,
     ]
 
-    return task_softmax, domain_softmax, total_loss, \
+    return task_output, domain_softmax, total_loss, \
         feature_extractor, summaries, extra_outputs
