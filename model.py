@@ -194,10 +194,10 @@ def build_model(x, y, domain, grl_lambda, keep_prob, training,
             tf.summary.histogram("outputs/domain_classifier", domain_softmax),
         ]
 
-        with tf.variable_scope("task_classifier_outputs"):
+        with tf.variable_scope("outputs"):
             for i in range(num_classes):
                 summaries += [
-                    tf.summary.histogram("outputs/task_classifier_%d" % i,
+                    tf.summary.histogram("task_classifier_%d" % i,
                         tf.slice(task_output, [0,i], [tf.shape(task_output)[0],1]))
                 ]
 
