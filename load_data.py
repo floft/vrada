@@ -280,9 +280,10 @@ def load_data_mimiciii_ahrf(data_path="datasets/process-mimic-iii/Data/admdata_1
     #folds_stat = folds_stat_file['folds_ep_mor'][label_type]
 
     # Get time-series data and labels
+    x = data_file['ep_tdata']
+
     adm_labels = data_file['adm_labels_all']
     y = adm_labels[:, label_type]
-    x = data_file['ep_tdata']
 
     # non-time-series data -- shape = [admid, features=5]
     # the 5 features:
@@ -448,16 +449,13 @@ def load_data_mimiciii_icd9(data_path="datasets/process-mimic-iii/Data/admdata_9
     folds_filename = os.path.join(data_path, "%dhrs_raw" % hrs,
         "series", "5-folds.npz")
 
-    # TODO create dataset for the above
-
     # Load all the required .npz files
     data_file = np.load(data_filename)
     folds_file = np.load(folds_filename)
 
     # Get time-series data and labels
-    adm_labels = data_file['adm_labels_all']
-    y = data_file['y_icd9']
     x = data_file['ep_tdata']
+    y = data_file['y_icd9']
 
     # non-time-series data -- shape = [admid, features=5]
     # the 5 features:

@@ -3,14 +3,16 @@
 #
 dir="/data/vcea/garrett.wilson/vrada"
 program="VRADA.py"
-modelFolder="vrada-mimic-models"
-logFolder="vrada-mimic-logs"
+modelFolder="vrada-mimic-icd9-models"
+logFolder="vrada-mimic-icd9-logs"
 #compressedDataset="trivial.zip"
 #dataset=("datasets/trivial")
 #compressedDataset="rfsleep.zip"
 #dataset=("datasets/RFSleep"/*.npy)
-compressedDataset="mimiciii.zip"
-dataset=("datasets/process-mimic-iii/Data/admdata_17f/24hrs/series/"/{imputed-normed-ep_1_24.npz,5-folds.npz})
+#compressedDataset="mimiciii.zip"
+#dataset=("datasets/process-mimic-iii/Data/admdata_17f/24hrs/series/"/{imputed-normed-ep_1_24.npz,5-folds.npz})
+compressedDataset="mimiciii-icd9.zip"
+dataset=("datasets/process-mimic-iii/Data/admdata_99p/48hrs_raw/series/"/{imputed-normed-ep_1_48.npz,5-folds.npz})
 
 # For processing MIMIC-III dataset - directory for database
 mimicdir="mimic-iii"

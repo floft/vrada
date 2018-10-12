@@ -35,7 +35,7 @@ def compute_evaluation(sess,
     task_accuracy_sum, domain_accuracy_sum,
     source_domain, target_domain,
     x, y, task_classifier, domain, keep_prob, training,
-    batch_size):
+    batch_size, auc_labels, auc_predictions, task_auc_all):
     """
     Run all the evaluation data to calculate accuracy and AUC
 
@@ -105,7 +105,7 @@ def compute_evaluation(sess,
                 auc_a_labels = np.copy(eval_labels_a)
                 auc_a_predictions = np.copy(pred_a)
                 auc_b_labels = np.copy(eval_labels_b)
-                auc_b_predictions = np.copy(task_classifier)
+                auc_b_predictions = np.copy(pred_b)
             else:
                 auc_a_labels = np.vstack([auc_a_labels, eval_labels_a])
                 auc_a_predictions = np.vstack([auc_a_predictions, pred_a])
@@ -119,18 +119,15 @@ def compute_evaluation(sess,
     task_b_accuracy = task_b / b_total
     domain_b_accuracy = domain_b / b_total
 
-    # New graph just for computing AUC
-    with tf.Session() as sess:
-        # Input Numpy arrays to TF
-        auc_a_labels = tf.convert_to_tensor(auc_a_labels, np.float32)
-        auc_a_predictions = tf.convert_to_tensor(auc_a_predictions, np.float32)
-        auc_b_labels = tf.convert_to_tensor(auc_b_labels, np.float32)
-        auc_b_predictions = tf.convert_to_tensor(auc_b_predictions, np.float32)
-        # AUC
-        task_a_auc = tf.metrics.auc(labels=auc_a_labels, predictions=auc_a_predictions)
-        task_b_auc = tf.metrics.auc(labels=auc_b_labels, predictions=auc_b_predictions)
-        # Run
-        task_a_auc, task_b_auc = sess.run([task_a_auc, task_b_auc])
+    # Computing AUC - we could do this out of TensorFlow, but I want to make
+    # sure the calculation is exactly the same as the TensorFlow AUC function
+    # we're using for the training batches
+    task_a_auc = sess.run(task_auc_all, feed_dict={
+        auc_labels: auc_a_labels, auc_predictions: auc_a_predictions
+    })
+    task_b_auc = sess.run(task_auc_all, feed_dict={
+        auc_labels: auc_b_labels, auc_predictions: auc_b_predictions
+    })
 
     return task_a_accuracy, domain_a_accuracy, \
         task_b_accuracy, domain_b_accuracy, \
@@ -323,7 +320,12 @@ def train(data_info,
     # predicted classes (if multi_class==True), so we'll also compute AUC, which
     # will be more useful
     with tf.variable_scope("task_auc"):
-        task_auc = tf.metrics.auc(labels=y, predictions=task_classifier)
+        _, task_auc = tf.metrics.auc(labels=y, predictions=task_classifier)
+
+        # Or, via placeholders if doing it in multiple batches
+        auc_labels = tf.placeholder(tf.float32, [None, num_classes], name='labels')
+        auc_predictions = tf.placeholder(tf.float32, [None, num_classes], name='predictions')
+        _, task_auc_all = tf.metrics.auc(labels=auc_labels, predictions=auc_predictions)
 
     # Get variables of model - needed if we train in two steps
     variables = tf.trainable_variables()
@@ -364,7 +366,7 @@ def train(data_info,
     # Keep track of state and summaries
     saver = tf.train.Saver(max_to_keep=num_steps)
     saver_hook = tf.train.CheckpointSaverHook(model_dir,
-            save_steps=model_save_steps, saver=saver)
+        save_steps=model_save_steps, saver=saver)
     writer = tf.summary.FileWriter(log_dir)
 
     # Start training
@@ -465,7 +467,7 @@ def train(data_info,
                     task_accuracy_sum, domain_accuracy_sum,
                     source_domain, target_domain,
                     x, y, task_classifier, domain, keep_prob, training,
-                    batch_size)
+                    batch_size, auc_labels, auc_predictions, task_auc_all)
 
                 task_source_val = tf.Summary(value=[tf.Summary.Value(
                     tag="accuracy_task/source/validation",
@@ -682,7 +684,7 @@ if __name__ == '__main__':
         index_one = False # Labels start from 0
         num_features = train_data_a.shape[2]
         time_steps = train_data_a.shape[1]
-        num_classes = len(np.unique(train_labels_a))
+        num_classes = train_labels_a.shape[1]
         assert num_classes == 20, "Should be 20 ICD-9 categories"
         data_info = (time_steps, num_features, num_classes)
         multi_class = True # Predict any number of the classes at once
