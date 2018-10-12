@@ -139,7 +139,7 @@ def evaluation_plots(sess,
     next_data_batch_test_b, next_labels_batch_test_b,
     source_domain, target_domain,
     feature_extractor, x, keep_prob, training, adaptation,
-    extra_model_outputs, num_features,
+    extra_model_outputs, num_features, first_step,
     tsne_filename=None,
     pca_filename=None,
     recon_a_filename=None,
@@ -212,19 +212,21 @@ def evaluation_plots(sess,
             plots.append(('feature_'+str(i)+'_reconstruction_a', recon_a_plot))
             plots.append(('feature_'+str(i)+'_reconstruction_b', recon_b_plot))
 
-            # Real data
-            real_a_plot = plot_real_time_series(
-                eval_data_a[:,:,i],
-                title='Real Data (source domain, feature '+str(i)+')',
-                filename=real_a_filename)
+            # Real data -- but only plot once, since this doesn't change for the
+            # evaluation data
+            if first_step:
+                real_a_plot = plot_real_time_series(
+                    eval_data_a[:,:,i],
+                    title='Real Data (source domain, feature '+str(i)+')',
+                    filename=real_a_filename)
 
-            real_b_plot = plot_real_time_series(
-                eval_data_b[:,:,i],
-                title='Real Data (target domain, feature '+str(i)+')',
-                filename=real_b_filename)
+                real_b_plot = plot_real_time_series(
+                    eval_data_b[:,:,i],
+                    title='Real Data (target domain, feature '+str(i)+')',
+                    filename=real_b_filename)
 
-            plots.append(('feature_'+str(i)+'_real_a', real_a_plot))
-            plots.append(('feature_'+str(i)+'_real_b', real_b_plot))
+                plots.append(('feature_'+str(i)+'_real_a', real_a_plot))
+                plots.append(('feature_'+str(i)+'_real_b', real_b_plot))
 
     return plots
 
@@ -510,13 +512,14 @@ def train(data_info,
                 writer.add_summary(summ, step)
 
                 # t-SNE, PCA, and VRNN reconstruction plots
+                first_step = i==0 # only plot real ones once
                 plots = evaluation_plots(sess,
                     eval_input_hook_a, eval_input_hook_b,
                     next_data_batch_test_a, next_labels_batch_test_a,
                     next_data_batch_test_b, next_labels_batch_test_b,
                     source_domain, target_domain,
                     feature_extractor, x, keep_prob, training, adaptation,
-                    extra_model_outputs, num_features)
+                    extra_model_outputs, num_features, first_step)
 
                 for name, buf in plots:
                     # See: https://gist.github.com/gyglim/1f8dfb1b5c82627ae3efcfbbadb9f514
