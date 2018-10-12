@@ -66,6 +66,9 @@ echo "Scratch space: $SCRATCHDIR"
 echo "SLURM_CPUS_PER_TASK: $SLURM_CPUS_PER_TASK"
 echo "SLURM_JOB_GPUS: $SLURM_JOB_GPUS"
 
+# This is somewhat sensitive data
+chmod 0700 "$SCRATCHDIR"
+
 # Get data
 echo "Getting data: started"
 cd "$SCRATCHDIR"

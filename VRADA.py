@@ -581,7 +581,7 @@ if __name__ == '__main__':
     parser.add_argument('--no-mimic-icd9', dest='mimic_icd9', action='store_false',
         help="Do not run on the MIMIC-III ICD-9 code prediction dataset (default)")
     parser.add_argument('--mimic-ahrf', dest='mimic_ahrf', action='store_true',
-        help="Run on the MIMIC-III Adult AHRF dataset (warning: not correct)")
+        help="Run on the MIMIC-III Adult AHRF dataset (warning: not just AHRF)")
     parser.add_argument('--no-mimic-ahrf', dest='mimic_ahrf', action='store_false',
         help="Do not run on the MIMIC-III Adult AHRF dataset (default)")
     parser.add_argument('--sleep', dest='sleep', action='store_true',

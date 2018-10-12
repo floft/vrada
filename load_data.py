@@ -473,6 +473,21 @@ def load_data_mimiciii_icd9(data_path="datasets/process-mimic-iii/Data/admdata_9
     x[np.isinf(x)] = 0
     x[np.isnan(x)] = 0
 
+    # In the paper they said they had 1 time-series data point for every 2 hours
+    # and ignored anything after 24 hours, i.e. time-series was of length 12.
+    #
+    # Ignore anything after 24 hours
+    x = x[:,:24,:]
+
+    # Average every 2 values
+    #  - move dimension of 24 to be last
+    #  - reshape last dimension of 24 to be 24x2 (adding another dimension)
+    #  - average over the last dimension
+    #  - transpose the new dimension of 12 to be in the middle again
+    x = np.transpose(x, (0, 2, 1)).reshape((x.shape[0], x.shape[2], 12, 2))
+    x = x.mean(axis=3)
+    x = np.transpose(x, (0, 2, 1))
+
     # Groups have roughly the same percentages as mentioned in paper
     # Sanity check lengths against what paper states:
     #    len(group2[0]),len(group3[0]),len(group4[0]),len(group5[0])
