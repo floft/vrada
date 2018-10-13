@@ -164,15 +164,41 @@ def build_model(x, y, domain, grl_lambda, keep_prob, training,
 
     # Losses
     with tf.variable_scope("task_loss"):
+        # Tile the class weights to match the batch size
+        #
+        # e.g., if the weights are [1,2,3,4] and we have a batch of size 2, we get:
+        #  [[1,2,3,4],
+        #   [1,2,3,4]]
+        if not isinstance(class_weights, float) and not isinstance(class_weights, int):
+            class_weights_reshape = tf.reshape(class_weights,
+                [1,tf.shape(class_weights)[0]])
+            tiled_class_weights = tf.tile(class_weights_reshape,
+                [tf.shape(y)[0],1])
+
+            # If not multi-class, then there needs to be one weight for each
+            # item in the batch based on which class that item was predicted to
+            # be
+            #
+            # e.g. if we predicted classes [[0,1],[1,0],[1,0]] (i.e. class 1,
+            # class 0, class 0) for a batch size of two, and we have weights
+            # [2,3] we should output: [3,2,2] for the weights for this batch
+            which_label = tf.argmax(task_classifier, axis=-1) # e.g. [1,0,0] for above
+            # Then, get the weights based on which class each was
+            batch_class_weights = tf.gather(class_weights, which_label)
+        # If it's just the default 1.0 or some scalar, then don't bother
+        # expanding to match the batch size
+        else:
+            tiled_class_weights = class_weights
+
         # If multi-class (i.e. predict any number of the classes not necessarily
         # just one), use a different TensorFlow loss function that treats each
         # output separately (not doing softmax, where we care about the max one)
         if multi_class:
             task_loss = tf.losses.sigmoid_cross_entropy(
-                y, task_classifier, class_weights)
+                y, task_classifier, tiled_class_weights)
         else:
             task_loss = tf.losses.softmax_cross_entropy(
-                y, task_classifier, class_weights)
+                y, task_classifier, batch_class_weights)
 
     with tf.variable_scope("domain_loss"):
         domain_loss = tf.losses.softmax_cross_entropy(domain, domain_classifier)
