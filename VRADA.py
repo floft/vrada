@@ -392,19 +392,19 @@ def train(data_info,
         tf.summary.scalar("auc_task/source/training", task_auc),
         tf.summary.scalar("accuracy_task_avg/source/training", task_accuracy_avg),
         tf.summary.scalar("accuracy_domain/source/training", domain_accuracy),
-        tf.summary.scalar("rate_false_positives/source", false_positives),
-        tf.summary.scalar("rate_true_positives/source", true_positives),
-        tf.summary.scalar("rate_false_negatives/source", false_negatives),
-        tf.summary.scalar("rate_true_negatives/source", true_negatives),
+        tf.summary.scalar("rate_false_positives/source/training", false_positives),
+        tf.summary.scalar("rate_true_positives/source/training", true_positives),
+        tf.summary.scalar("rate_false_negatives/source/training", false_negatives),
+        tf.summary.scalar("rate_true_negatives/source/training", true_negatives),
     ]
     training_b_summs = [
         tf.summary.scalar("auc_task/target/training", task_auc),
         tf.summary.scalar("accuracy_task_avg/target/training", task_accuracy_avg),
         tf.summary.scalar("accuracy_domain/target/training", domain_accuracy),
-        tf.summary.scalar("rate_false_positives/target", false_positives),
-        tf.summary.scalar("rate_true_positives/target", true_positives),
-        tf.summary.scalar("rate_false_negatives/target", false_negatives),
-        tf.summary.scalar("rate_true_negatives/target", true_negatives),
+        tf.summary.scalar("rate_false_positives/target/training", false_positives),
+        tf.summary.scalar("rate_true_positives/target/training", true_positives),
+        tf.summary.scalar("rate_false_negatives/target/training", false_negatives),
+        tf.summary.scalar("rate_true_negatives/target/training", true_negatives),
     ]
     with tf.variable_scope("task_accuracy", auxiliary_name_scope=False):
         for i in range(num_classes):
