@@ -35,7 +35,8 @@ def compute_evaluation(sess,
     task_accuracy_sum, domain_accuracy_sum,
     source_domain, target_domain,
     x, y, task_classifier, domain, keep_prob, training,
-    batch_size, auc_labels, auc_predictions, task_auc_all):
+    batch_size, auc_labels, auc_predictions, task_auc_all,
+    update_rates_a, update_rates_b):
     """
     Run all the evaluation data to calculate accuracy and AUC
 
@@ -81,16 +82,23 @@ def compute_evaluation(sess,
                 batch_target_domain = target_domain
 
             # Log summaries run on the evaluation/validation data
-            batch_task_a, batch_domain_a, pred_a = sess.run(
-                [task_accuracy_sum, domain_accuracy_sum, task_classifier], feed_dict={
+            feed_dict = {
                 x: eval_data_a, y: eval_labels_a, domain: batch_source_domain,
                 keep_prob: 1.0, training: False
-            })
-            batch_task_b, batch_domain_b, pred_b = sess.run(
-                [task_accuracy_sum, domain_accuracy_sum, task_classifier], feed_dict={
+            }
+            batch_task_a, batch_domain_a, pred_a = sess.run(
+                [task_accuracy_sum, domain_accuracy_sum, task_classifier],
+                feed_dict=feed_dict)
+            sess.run(update_rates_a, feed_dict=feed_dict)
+
+            feed_dict = {
                 x: eval_data_b, y: eval_labels_b, domain: batch_target_domain,
                 keep_prob: 1.0, training: False
-            })
+            }
+            batch_task_b, batch_domain_b, pred_b = sess.run(
+                [task_accuracy_sum, domain_accuracy_sum, task_classifier],
+                feed_dict=feed_dict)
+            sess.run(update_rates_b, feed_dict=feed_dict)
 
             # Update sums for computing accuracy
             task_a += batch_task_a
@@ -386,7 +394,9 @@ def train(data_info,
 
     # Per-class metrics
     reset_rates = []
-    update_rates = []
+    update_rates = [[], []] # do two domains separately
+    val_a_summs = []
+    val_b_summs = []
 
     for i in range(num_classes):
         with tf.variable_scope("per_class_metrics/class_%d" % i):
@@ -399,35 +409,63 @@ def train(data_info,
             # For high class imbalances, it's useful to see how many false
             # positives/negatives there are
             # Note: create resetable metrics
-            true_positives, update_TP, reset_TP = create_reset_metric(
-                tf.metrics.true_positives, "TP", labels=class_y, predictions=class_predictions)
-            false_positives, update_FP, reset_FP = create_reset_metric(
-                tf.metrics.false_positives, "FP", labels=class_y, predictions=class_predictions)
-            true_negatives, update_TN, reset_TN = create_reset_metric(
-                tf.metrics.true_negatives, "TN", labels=class_y, predictions=class_predictions)
-            false_negatives, update_FN, reset_FN = create_reset_metric(
-                tf.metrics.false_negatives, "FN", labels=class_y, predictions=class_predictions)
-            reset_rates += [reset_TP, reset_FP, reset_TN, reset_FN]
-            update_rates += [update_TP, update_FP, update_TN, update_FN]
+            true_positives = []
+            false_positives = []
+            true_negatives = []
+            false_negatives = []
+            for j in range(2):
+                tp, update_TP, reset_TP = create_reset_metric(
+                    tf.metrics.true_positives, "TP_%d" % j,
+                    labels=class_y, predictions=class_predictions)
+                fp, update_FP, reset_FP = create_reset_metric(
+                    tf.metrics.false_positives, "FP_%d" % j,
+                    labels=class_y, predictions=class_predictions)
+                tn, update_TN, reset_TN = create_reset_metric(
+                    tf.metrics.true_negatives, "TN_%d" % j,
+                    labels=class_y, predictions=class_predictions)
+                fn, update_FN, reset_FN = create_reset_metric(
+                    tf.metrics.false_negatives, "FN_%d" % j,
+                    labels=class_y, predictions=class_predictions)
+                true_positives.append(tp)
+                false_positives.append(fp)
+                true_negatives.append(tn)
+                false_negatives.append(fn)
+                reset_rates += [reset_TP, reset_FP, reset_TN, reset_FN]
+                update_rates[j] += [update_TP, update_FP, update_TN, update_FN]
 
         training_a_summs += [
             tf.summary.scalar("accuracy_task_class%d/source/training" % i, class_acc),
-            tf.summary.scalar("rates_class%d/FP/source/training" % i, false_positives),
-            tf.summary.scalar("rates_class%d/TP/source/training" % i, true_positives),
-            tf.summary.scalar("rates_class%d/FN/source/training" % i, false_negatives),
-            tf.summary.scalar("rates_class%d/TN/source/training" % i, true_negatives),
+            tf.summary.scalar("rates_class%d/FP/source/training" % i, false_positives[0]),
+            tf.summary.scalar("rates_class%d/TP/source/training" % i, true_positives[0]),
+            tf.summary.scalar("rates_class%d/FN/source/training" % i, false_negatives[0]),
+            tf.summary.scalar("rates_class%d/TN/source/training" % i, true_negatives[0]),
+        ]
+        val_a_summs += [
+            tf.summary.scalar("rates_class%d/FP/source/validation" % i, false_positives[0]),
+            tf.summary.scalar("rates_class%d/TP/source/validation" % i, true_positives[0]),
+            tf.summary.scalar("rates_class%d/FN/source/validation" % i, false_negatives[0]),
+            tf.summary.scalar("rates_class%d/TN/source/validation" % i, true_negatives[0]),
         ]
         training_b_summs += [
             tf.summary.scalar("accuracy_task_class%d/target/training" % i, class_acc),
-            tf.summary.scalar("rates_class%d/FP/target/training" % i, false_positives),
-            tf.summary.scalar("rates_class%d/TP/target/training" % i, true_positives),
-            tf.summary.scalar("rates_class%d/FN/target/training" % i, false_negatives),
-            tf.summary.scalar("rates_class%d/TN/target/training" % i, true_negatives),
+            tf.summary.scalar("rates_class%d/FP/target/training" % i, false_positives[1]),
+            tf.summary.scalar("rates_class%d/TP/target/training" % i, true_positives[1]),
+            tf.summary.scalar("rates_class%d/FN/target/training" % i, false_negatives[1]),
+            tf.summary.scalar("rates_class%d/TN/target/training" % i, true_negatives[1]),
+        ]
+        val_b_summs += [
+            tf.summary.scalar("rates_class%d/FP/target/validation" % i, false_positives[1]),
+            tf.summary.scalar("rates_class%d/TP/target/validation" % i, true_positives[1]),
+            tf.summary.scalar("rates_class%d/FN/target/validation" % i, false_negatives[1]),
+            tf.summary.scalar("rates_class%d/TN/target/validation" % i, true_negatives[1]),
         ]
 
+    update_rates_a, update_rates_b = update_rates
     training_summaries_a = tf.summary.merge(training_a_summs)
     training_summaries_extra_a = tf.summary.merge(model_summaries)
     training_summaries_b = tf.summary.merge(training_b_summs)
+    validation_summaries_a = tf.summary.merge(val_a_summs)
+    validation_summaries_b = tf.summary.merge(val_b_summs)
 
     # Allow restoring global_step from past run
     global_step = tf.Variable(0, name="global_step", trainable=False)
@@ -514,7 +552,7 @@ def train(data_info,
                     keep_prob: 1.0, training: False
                 }
                 sess.run(reset_rates)
-                sess.run(update_rates, feed_dict=feed_dict)
+                sess.run(update_rates_a, feed_dict=feed_dict)
                 summ = sess.run(training_summaries_a, feed_dict=feed_dict)
                 writer.add_summary(summ, step)
 
@@ -522,14 +560,14 @@ def train(data_info,
                     x: data_batch_b, y: labels_batch_b, domain: target_domain,
                     keep_prob: 1.0, training: False
                 }
-                sess.run(reset_rates)
-                sess.run(update_rates, feed_dict=feed_dict)
+                sess.run(update_rates_b, feed_dict=feed_dict)
                 summ = sess.run(training_summaries_b, feed_dict=feed_dict)
                 writer.add_summary(summ, step)
 
             # Log validation accuracy/AUC less frequently
             if i%log_validation_accuracy_steps == 0:
-                # Evaluation accuracy and AUC
+                # Evaluation accuracy, AUC, rates, etc.
+                sess.run(reset_rates)
                 task_a_accuracy, domain_a_accuracy, \
                 task_b_accuracy, domain_b_accuracy, \
                 task_a_auc, task_b_auc = compute_evaluation(sess,
@@ -539,7 +577,8 @@ def train(data_info,
                     task_accuracy_sum, domain_accuracy_sum,
                     source_domain, target_domain,
                     x, y, task_classifier, domain, keep_prob, training,
-                    batch_size, auc_labels, auc_predictions, task_auc_all)
+                    batch_size, auc_labels, auc_predictions, task_auc_all,
+                    update_rates_a, update_rates_b)
 
                 task_source_val = []
                 for j in range(num_classes):
@@ -587,6 +626,13 @@ def train(data_info,
                 writer.add_summary(task_target_val_avg, step)
                 writer.add_summary(domain_target_val, step)
                 writer.add_summary(task_target_auc_val, step)
+
+                # Add the summaries about rates that were updated above in the
+                # evaluation function (via update_rates list)
+                summs_a, summs_b = sess.run([
+                    validation_summaries_a, validation_summaries_b])
+                writer.add_summary(summs_a, step)
+                writer.add_summary(summs_b, step)
 
             # Larger stuff like weights and t-SNE plots occasionally
             if i%log_extra_save_steps == 0:
