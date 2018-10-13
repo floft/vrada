@@ -344,21 +344,6 @@ def train(data_info,
         domain_accuracy_sum = tf.reduce_sum(equals)
         domain_accuracy = tf.reduce_mean(equals)
 
-    # For high class imbalances, it's useful to see how many false
-    # positives/negatives there are
-    #
-    # Note: create resetable metrics
-    true_positives, update_TP, reset_TP = create_reset_metric(
-        tf.metrics.true_positives, "TP", labels=y, predictions=predictions)
-    false_positives, update_FP, reset_FP = create_reset_metric(
-        tf.metrics.false_positives, "FP", labels=y, predictions=predictions)
-    true_negatives, update_TN, reset_TN = create_reset_metric(
-        tf.metrics.true_negatives, "TN", labels=y, predictions=predictions)
-    false_negatives, update_FN, reset_FN = create_reset_metric(
-        tf.metrics.false_negatives, "FN", labels=y, predictions=predictions)
-    reset_rates = [reset_TP, reset_FP, reset_TN, reset_FN]
-    update_rates = [update_TP, update_FP, update_TN, update_FN]
-
     # Also compute AUC since that's what's given in some papers
     with tf.variable_scope("task_auc"):
         _, task_auc = tf.metrics.auc(labels=y, predictions=task_classifier)
@@ -392,30 +377,54 @@ def train(data_info,
         tf.summary.scalar("auc_task/source/training", task_auc),
         tf.summary.scalar("accuracy_task_avg/source/training", task_accuracy_avg),
         tf.summary.scalar("accuracy_domain/source/training", domain_accuracy),
-        tf.summary.scalar("rate_false_positives/source/training", false_positives),
-        tf.summary.scalar("rate_true_positives/source/training", true_positives),
-        tf.summary.scalar("rate_false_negatives/source/training", false_negatives),
-        tf.summary.scalar("rate_true_negatives/source/training", true_negatives),
     ]
     training_b_summs = [
         tf.summary.scalar("auc_task/target/training", task_auc),
         tf.summary.scalar("accuracy_task_avg/target/training", task_accuracy_avg),
         tf.summary.scalar("accuracy_domain/target/training", domain_accuracy),
-        tf.summary.scalar("rate_false_positives/target/training", false_positives),
-        tf.summary.scalar("rate_true_positives/target/training", true_positives),
-        tf.summary.scalar("rate_false_negatives/target/training", false_negatives),
-        tf.summary.scalar("rate_true_negatives/target/training", true_negatives),
     ]
-    with tf.variable_scope("task_accuracy", auxiliary_name_scope=False):
-        for i in range(num_classes):
-            class_acc = tf.reshape(tf.slice(task_accuracy, [i], [1]), [])
 
-            training_a_summs += [
-                tf.summary.scalar("accuracy_task_class%d/source/training" % i, class_acc),
-            ]
-            training_b_summs += [
-                tf.summary.scalar("accuracy_task_class%d/target/training" % i, class_acc),
-            ]
+    # Per-class metrics
+    reset_rates = []
+    update_rates = []
+
+    for i in range(num_classes):
+        with tf.variable_scope("per_class_metrics/class_%d" % i):
+            # The one value for the ith class
+            class_acc = tf.reshape(tf.slice(task_accuracy, [i], [1]), [])
+            # Get ith column (all groundtruth/predictions for ith class)
+            class_y = tf.slice(y, [0,i], [tf.shape(y)[0], 1])
+            class_predictions = tf.slice(predictions, [0,i], [tf.shape(y)[0], 1])
+
+            # For high class imbalances, it's useful to see how many false
+            # positives/negatives there are
+            # Note: create resetable metrics
+            true_positives, update_TP, reset_TP = create_reset_metric(
+                tf.metrics.true_positives, "TP", labels=class_y, predictions=class_predictions)
+            false_positives, update_FP, reset_FP = create_reset_metric(
+                tf.metrics.false_positives, "FP", labels=class_y, predictions=class_predictions)
+            true_negatives, update_TN, reset_TN = create_reset_metric(
+                tf.metrics.true_negatives, "TN", labels=class_y, predictions=class_predictions)
+            false_negatives, update_FN, reset_FN = create_reset_metric(
+                tf.metrics.false_negatives, "FN", labels=class_y, predictions=class_predictions)
+            reset_rates += [reset_TP, reset_FP, reset_TN, reset_FN]
+            update_rates += [update_TP, update_FP, update_TN, update_FN]
+
+        training_a_summs += [
+            tf.summary.scalar("accuracy_task_class%d/source/training" % i, class_acc),
+            tf.summary.scalar("rates_class%d/FP/source/training" % i, false_positives),
+            tf.summary.scalar("rates_class%d/TP/source/training" % i, true_positives),
+            tf.summary.scalar("rates_class%d/FN/source/training" % i, false_negatives),
+            tf.summary.scalar("rates_class%d/TN/source/training" % i, true_negatives),
+        ]
+        training_b_summs += [
+            tf.summary.scalar("accuracy_task_class%d/target/training" % i, class_acc),
+            tf.summary.scalar("rates_class%d/FP/target/training" % i, false_positives),
+            tf.summary.scalar("rates_class%d/TP/target/training" % i, true_positives),
+            tf.summary.scalar("rates_class%d/FN/target/training" % i, false_negatives),
+            tf.summary.scalar("rates_class%d/TN/target/training" % i, true_negatives),
+        ]
+
     training_summaries_a = tf.summary.merge(training_a_summs)
     training_summaries_extra_a = tf.summary.merge(model_summaries)
     training_summaries_b = tf.summary.merge(training_b_summs)
