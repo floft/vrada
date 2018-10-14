@@ -716,6 +716,8 @@ if __name__ == '__main__':
         help="Run on the MIMIC-III Adult AHRF dataset (warning: not just AHRF)")
     parser.add_argument('--no-mimic-ahrf', dest='mimic_ahrf', action='store_false',
         help="Do not run on the MIMIC-III Adult AHRF dataset (default)")
+    parser.add_argument('--fold', default=0, type=int,
+        help="Fold when training on MIMIC datasets (0-4, default 0)")
     parser.add_argument('--sleep', dest='sleep', action='store_true',
         help="Run on the RF sleep stage dataset")
     parser.add_argument('--no-sleep', dest='sleep', action='store_false',
@@ -813,7 +815,7 @@ if __name__ == '__main__':
         train_data_a, train_labels_a, \
         test_data_a, test_labels_a, \
         train_data_b, train_labels_b, \
-        test_data_b, test_labels_b = load_data_mimiciii_ahrf()
+        test_data_b, test_labels_b = load_data_mimiciii_ahrf(fold=args.fold)
 
         # Information about dataset
         index_one = False # Labels start from 0
@@ -831,7 +833,7 @@ if __name__ == '__main__':
         train_data_a, train_labels_a, \
         test_data_a, test_labels_a, \
         train_data_b, train_labels_b, \
-        test_data_b, test_labels_b = load_data_mimiciii_icd9()
+        test_data_b, test_labels_b = load_data_mimiciii_icd9(fold=args.fold)
 
         # Information about dataset
         index_one = False # Labels start from 0
