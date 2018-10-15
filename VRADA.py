@@ -252,6 +252,25 @@ def create_reset_metric(metric, scope='reset_metrics', **metric_args):
 
     return metric_op, update_op, reset_op
 
+def opt_with_summ(optimizer, loss, var_list=None):
+    """
+    Run the optimizer, but also create summaries for the gradients (possibly
+    useful for debugging)
+    """
+    summaries = []
+
+    # Calculate and perform update
+    grads = optimizer.compute_gradients(loss, var_list=var_list)
+    update_step = optimizer.apply_gradients(grads)
+
+    # Generate summaries for each gradient
+    for g in grads:
+        # Skip those whose gradient is not computed (i.e. not in var list above)
+        if g[0] is not None:
+            summaries.append(tf.summary.histogram("{}-grad".format(g[1].name), g))
+
+    return update_step, summaries
+
 def train(
         num_features, num_classes, x_dims,
         features_a, labels_a, test_features_a, test_labels_a,
@@ -271,7 +290,8 @@ def train(
         log_extra_save_steps=1000,
         adaptation=True,
         multi_class=False,
-        class_weights=1.0):
+        class_weights=1.0,
+        plot_gradients=False):
 
     if not os.path.exists(model_dir):
         os.makedirs(model_dir)
@@ -370,7 +390,12 @@ def train(
     # Optimizer - update ops for batch norm layers
     with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
         optimizer = tf.train.AdamOptimizer(lr)
-        train_all = optimizer.minimize(total_loss)
+
+        if plot_gradients:
+            train_all, train_all_summs = opt_with_summ(optimizer, total_loss)
+        else:
+            train_all = optimizer.minimize(total_loss)
+
         train_notdomain = optimizer.minimize(total_loss,
             var_list=rnn_vars+feature_extractor_vars+task_classifier_vars)
 
@@ -460,11 +485,19 @@ def train(
         ]
 
     update_rates_a, update_rates_b = update_rates
-    training_summaries_a = tf.summary.merge(training_a_summs)
     training_summaries_extra_a = tf.summary.merge(model_summaries)
     training_summaries_b = tf.summary.merge(training_b_summs)
     validation_summaries_a = tf.summary.merge(val_a_summs)
     validation_summaries_b = tf.summary.merge(val_b_summs)
+
+    # If we ant to plot gradients, include both the training summaries and
+    # gradient summaries
+    if plot_gradients:
+        training_summaries_a = tf.summary.merge(
+            training_a_summs + train_all_summs
+        )
+    else:
+        training_summaries_a = tf.summary.merge(training_a_summs)
 
     # Allow restoring global_step from past run
     global_step = tf.Variable(0, name="global_step", trainable=False)
@@ -754,7 +787,7 @@ if __name__ == '__main__':
     parser.add_argument('--lr', default=0.0003, type=float,
         help="Learning rate for training (default 0.0003)")
     parser.add_argument('--lr-mult', default=1.0, type=float,
-        help="Multiplier for extra discriminator training learning rate (default 1)")
+        help="Multiplier for extra discriminator training learning rate (default 1.0)")
     parser.add_argument('--dropout', default=0.8, type=float,
         help="Keep probability for dropout (default 0.8)")
     parser.add_argument('--model-steps', default=1000, type=int,
@@ -765,6 +798,12 @@ if __name__ == '__main__':
         help="Log validation accuracy and AUC every so many steps (default 250)")
     parser.add_argument('--log-steps-slow', default=1000, type=int,
         help="Log weights, plots, etc. every so many steps (default 1000)")
+    parser.add_argument('--balance', dest='balance', action='store_true',
+        help="On high class imbalances (e.g. MIMIC-III) weight the loss function (default)")
+    parser.add_argument('--no-balance', dest='balance', action='store_false',
+        help="Do not weight loss function with high class imbalances")
+    parser.add_argument('--balance-pow', default=1.0, type=float,
+        help="For increased balancing, raise weights to a specified power (default 1.0)")
     parser.add_argument('--debug', dest='debug', action='store_true',
         help="Start new log/model/images rather than continuing from previous run")
     parser.add_argument('--debug-num', default=-1, type=int,
@@ -775,7 +814,7 @@ if __name__ == '__main__':
         lstm_da=False, vrnn_da=False, cnn_da=False,
         mimic_ahrf=False, mimic_icd9=False, sleep=False,
         trivial_line=False, trivial_sine=False,
-        svhn=False, mnist=False, debug=False)
+        svhn=False, mnist=False, balance=True, debug=False)
     args = parser.parse_args()
 
     # Load datasets - domains A & B
@@ -842,7 +881,8 @@ if __name__ == '__main__':
         multi_class = False # Predict only one class
 
         # Due to the large class imbalance, we should weight the + class more
-        class_weights = len(train_labels_a)/counts # i.e. 1/(counts/len)
+        # e.g. 1/(counts/len) if power is 1
+        class_weights = np.power(len(train_labels_a)/counts, args.balance_pow)
     elif args.mimic_icd9:
         train_data_a, train_labels_a, \
         test_data_a, test_labels_a, \
@@ -860,7 +900,7 @@ if __name__ == '__main__':
         # Again, handle large class imbalance
         num_each_label = np.sum(train_labels_a, axis=0)
         total = len(train_labels_a)
-        class_weights = total/num_each_label
+        class_weights = np.power(total/num_each_label, args.balance_pow)
 
         # Get rid of nan/inf
         class_weights[np.isnan(class_weights)] = 1.0
@@ -888,6 +928,10 @@ if __name__ == '__main__':
         num_features = None # Not used for CNN
         num_classes = len(np.unique(train_labels_a))
         multi_class = False
+        class_weights = 1.0
+
+    # If we disabled balancing, set class_weights to 1
+    if not args.balance:
         class_weights = 1.0
 
     # For image data, it's pixels x pixels x channels, e.g. [32,32,3]

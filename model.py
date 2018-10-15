@@ -27,6 +27,7 @@ def build_rnn(x, keep_prob, layers):
     batch_size = tf.shape(x)[0]
     initial_state = cell.zero_state(batch_size, tf.float32)
 
+    # TODO try tf.nn.bidirectional_dynamic_rnn
     outputs, final_state = tf.nn.dynamic_rnn(cell, x, initial_state=initial_state)
 
     return initial_state, outputs, cell, final_state
