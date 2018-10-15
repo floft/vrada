@@ -112,7 +112,6 @@ def show(images, labels=None, num=100, cols=10, title=None):
         plt.imshow((128*np.squeeze(images[i]) + 128).astype(np.uint8), cmap='gray')
     plt.show()
 
-# Version based on Felix Mohr's code (seems simpler)
 def denormalize(image):
     """ Take TensorFlow tensor and get a 8-bit (0-255) image again """
     return tf.cast(128*image + 128, tf.uint8)
