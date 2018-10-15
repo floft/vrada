@@ -10,7 +10,7 @@ framework = tf.contrib.framework
 from VRNN import VRNNCell
 from flip_gradient import flip_gradient
 
-def build_rnn(x, keep_prob, create_cell, dropout=True, bidirectional=True):
+def build_rnn(x, keep_prob, create_cell, dropout=True, bidirectional=False):
     """
     Multi-layer LSTM
     https://github.com/GarrettHoffman/lstm-oreilly
@@ -36,6 +36,8 @@ def build_rnn(x, keep_prob, create_cell, dropout=True, bidirectional=True):
         # If time_steps=24 and units=100, then:
         # Outputs before: (?x24x100, ?x24x100)
         # Outputs after:  (?x24x200)
+        # i.e., we're concatenating all the features for each time step
+        # then we end up just taking the last ones normally, so 200 features
         outputs = tf.concat(outputs, axis=-1)
     else:
         batch_size = tf.shape(x)[0]
