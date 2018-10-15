@@ -12,6 +12,7 @@ commands.txt
 *.gz
 *.zip
 *.bak
+*.mat
 
 # Datasets
 *.npy

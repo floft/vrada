@@ -4,6 +4,8 @@ Create models
 This provides the functions like build_lstm and build_vrnn that are used in training.
 """
 import tensorflow as tf
+layers = tf.contrib.layers
+framework = tf.contrib.framework
 
 from VRNN import VRNNCell
 from flip_gradient import flip_gradient
@@ -189,6 +191,7 @@ def build_model(x, y, domain, grl_lambda, keep_prob, training,
         # expanding to match the batch size
         else:
             tiled_class_weights = class_weights
+            batch_class_weights = class_weights
 
         # If multi-class (i.e. predict any number of the classes not necessarily
         # just one), use a different TensorFlow loss function that treats each
@@ -366,6 +369,49 @@ def build_vrnn(x, y, domain, grl_lambda, keep_prob, training,
     extra_outputs = [
         decoder_mu, decoder_sigma,
     ]
+
+    return task_output, domain_softmax, total_loss, \
+        feature_extractor, summaries, extra_outputs
+
+leaky_relu = lambda net: tf.nn.leaky_relu(net, alpha=0.3)
+
+def cnn(x, keep_prob):
+    """ Simple CNN, taken from tensorflow-experiments/VAE """
+    with framework.arg_scope([layers.conv2d], num_outputs=64, kernel_size=4,
+                    padding='same', activation_fn=leaky_relu):
+        n  = layers.conv2d(x, stride=2)
+        n  = tf.nn.dropout(n, keep_prob)
+        n  = layers.conv2d(n, stride=2)
+        n  = tf.nn.dropout(n, keep_prob)
+        n  = layers.conv2d(n, stride=1)
+        n  = tf.nn.dropout(n, keep_prob)
+        n  = layers.flatten(n)
+
+    return n
+
+def build_cnn(x, y, domain, grl_lambda, keep_prob, training,
+            num_classes, num_features, adaptation, units,
+            multi_class=False, class_weights=1.0):
+    """ CNN for image data rather than time-series data """
+    # Build CNN
+    with tf.variable_scope("cnn_model"):
+        cnn_output = cnn(x, keep_prob)
+
+    # Other model components passing in output from CNN
+    task_output, domain_softmax, task_loss, domain_loss, \
+        feature_extractor, summaries = build_model(
+            cnn_output, y, domain, grl_lambda, keep_prob, training,
+            num_classes, adaptation, multi_class, class_weights)
+
+    # Total loss is the sum
+    with tf.variable_scope("total_loss"):
+        total_loss = task_loss
+
+        if adaptation:
+            total_loss += domain_loss
+
+    # We can't generate with this CNN
+    extra_outputs = None
 
     return task_output, domain_softmax, total_loss, \
         feature_extractor, summaries, extra_outputs

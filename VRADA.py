@@ -22,11 +22,12 @@ mpl.use('Agg')
 import matplotlib.pyplot as plt
 
 from plot import plot_embedding, plot_random_time_series, plot_real_time_series
-from model import build_lstm, build_vrnn
+from model import build_lstm, build_vrnn, build_cnn
 from load_data import IteratorInitializerHook, \
     load_data, one_hot, \
     domain_labels, _get_input_fn, \
     load_data_sleep, load_data_mimiciii_ahrf, load_data_mimiciii_icd9
+from image_datasets import svhn, mnist
 
 def compute_evaluation(sess,
     eval_input_hook_a, eval_input_hook_b,
@@ -251,7 +252,8 @@ def create_reset_metric(metric, scope='reset_metrics', **metric_args):
 
     return metric_op, update_op, reset_op
 
-def train(data_info,
+def train(
+        num_features, num_classes, x_dims,
         features_a, labels_a, test_features_a, test_labels_a,
         features_b, labels_b, test_features_b, test_labels_b,
         model_func=build_lstm,
@@ -275,9 +277,6 @@ def train(data_info,
         os.makedirs(model_dir)
     if not os.path.exists(log_dir):
         os.makedirs(log_dir)
-
-    # Data stats
-    time_steps, num_features, num_classes = data_info
 
     # For adaptation, we'll be concatenating together half source and half target
     # data, so to keep the batch_size about the same, we'll cut it in half
@@ -304,7 +303,7 @@ def train(data_info,
 
     # Inputs
     keep_prob = tf.placeholder_with_default(1.0, shape=(), name='keep_prob') # for dropout
-    x = tf.placeholder(tf.float32, [None, time_steps, num_features], name='x') # input data
+    x = tf.placeholder(tf.float32, [None]+x_dims, name='x') # input data
     domain = tf.placeholder(tf.float32, [None, 2], name='domain') # which domain
     y = tf.placeholder(tf.float32, [None, num_classes], name='y') # class 1, 2, etc. one-hot
     training = tf.placeholder(tf.bool, name='training') # whether we're training (batch norm)
@@ -708,6 +707,14 @@ if __name__ == '__main__':
         help="Use VRNN-DA model")
     parser.add_argument('--no-vrnn-da', dest='vrnn_da', action='store_false',
         help="Do not use VRNN-DA model (default)")
+    parser.add_argument('--cnn', dest='cnn', action='store_true',
+        help="Use CNN model (for MNIST or SVHN)")
+    parser.add_argument('--no-cnn', dest='cnn', action='store_false',
+        help="Do not use CNN model (default)")
+    parser.add_argument('--cnn-da', dest='cnn_da', action='store_true',
+        help="Use CNN-DA model (for MNIST or SVHN)")
+    parser.add_argument('--no-cnn-da', dest='cnn_da', action='store_false',
+        help="Do not use CNN-DA model (default)")
     parser.add_argument('--mimic-icd9', dest='mimic_icd9', action='store_true',
         help="Run on the MIMIC-III ICD-9 code prediction dataset")
     parser.add_argument('--no-mimic-icd9', dest='mimic_icd9', action='store_false',
@@ -730,6 +737,14 @@ if __name__ == '__main__':
         help="Run on the trivial synthetic sine dataset")
     parser.add_argument('--no-trivial-sine', dest='trivial_sine', action='store_false',
         help="Do not run on the trivial synthetic sine dataset (default)")
+    parser.add_argument('--svhn', dest='svhn', action='store_true',
+        help="Run on SVHN to MNIST (make sure you use CNN)")
+    parser.add_argument('--no-svhn', dest='svhn', action='store_false',
+        help="Do not run on SVHN to MNIST (default)")
+    parser.add_argument('--mnist', dest='mnist', action='store_true',
+        help="Run on MNIST to SVHN (make sure you use CNN)")
+    parser.add_argument('--no-mnist', dest='mnist', action='store_false',
+        help="Do not run on MNIST to SVHN (default)")
     parser.add_argument('--units', default=100, type=int,
         help="Number of LSTM hidden units and VRNN latent variable size (default 100)")
     parser.add_argument('--steps', default=100000, type=int,
@@ -756,15 +771,18 @@ if __name__ == '__main__':
         help="Specify exact log/model/images number to use rather than incrementing from last. " \
             +"(Don't pass both this and --debug at the same time.)")
     parser.set_defaults(
-        lstm=False, vrnn=False, lstm_da=False, vrnn_da=False,
-        mimic_ahrf=False, mimic_icd9=False, sleep=False, trivial_line=False,
-        trivial_sine=False, debug=False)
+        lstm=False, vrnn=False, cnn=False,
+        lstm_da=False, vrnn_da=False, cnn_da=False,
+        mimic_ahrf=False, mimic_icd9=False, sleep=False,
+        trivial_line=False, trivial_sine=False,
+        svhn=False, mnist=False, debug=False)
     args = parser.parse_args()
 
     # Load datasets - domains A & B
     assert args.mimic_ahrf + args.mimic_icd9 + \
         + args.sleep \
-        + args.trivial_line + args.trivial_sine == 1, \
+        + args.trivial_line + args.trivial_sine \
+        + args.svhn + args.mnist == 1, \
         "Must specify exactly one dataset to use"
 
     if args.trivial_line:
@@ -779,7 +797,6 @@ if __name__ == '__main__':
         num_features = 1
         time_steps = train_data_a.shape[1]
         num_classes = len(np.unique(train_labels_a))
-        data_info = (time_steps, num_features, num_classes)
         multi_class = False # Predict only one class
         class_weights = 1.0 # Already balanced
     elif args.trivial_sine:
@@ -794,7 +811,6 @@ if __name__ == '__main__':
         num_features = 1
         time_steps = train_data_a.shape[1]
         num_classes = len(np.unique(train_labels_a))
-        data_info = (time_steps, num_features, num_classes)
         multi_class = False # Predict only one class
         class_weights = 1.0 # Already balanced
     elif args.sleep:
@@ -808,7 +824,6 @@ if __name__ == '__main__':
         num_features = train_data_a.shape[2]
         time_steps = train_data_a.shape[1]
         num_classes = len(np.unique(train_labels_a))
-        data_info = (time_steps, num_features, num_classes)
         multi_class = False # Predict only one class
         class_weights = 1.0 # Probably balanced? Didn't check.
     elif args.mimic_ahrf:
@@ -824,12 +839,11 @@ if __name__ == '__main__':
         unique, counts = np.unique(train_labels_a, return_counts=True)
         num_classes = len(unique)
         assert num_classes == 2, "Should be 2 classes (binary) for MIMIC-III AHRF"
-        data_info = (time_steps, num_features, num_classes)
         multi_class = False # Predict only one class
 
         # Due to the large class imbalance, we should weight the + class more
         class_weights = len(train_labels_a)/counts # i.e. 1/(counts/len)
-    else: # args.mimic_icd9
+    elif args.mimic_icd9:
         train_data_a, train_labels_a, \
         test_data_a, test_labels_a, \
         train_data_b, train_labels_b, \
@@ -841,7 +855,6 @@ if __name__ == '__main__':
         time_steps = train_data_a.shape[1]
         num_classes = train_labels_a.shape[1]
         assert num_classes == 20, "Should be 20 ICD-9 categories"
-        data_info = (time_steps, num_features, num_classes)
         multi_class = True # Predict any number of the classes at once
 
         # Again, handle large class imbalance
@@ -852,6 +865,37 @@ if __name__ == '__main__':
         # Get rid of nan/inf
         class_weights[np.isnan(class_weights)] = 1.0
         class_weights[np.isinf(class_weights)] = 1.0
+    elif args.svhn:
+        train_data_a, train_labels_a, \
+        test_data_a, test_labels_a = svhn()
+        train_data_b, train_labels_b, \
+        test_data_b, test_labels_b = mnist()
+
+        # Information about dataset
+        index_one = False # Labels start from 0
+        num_features = None # Not used for CNN
+        num_classes = len(np.unique(train_labels_a))
+        multi_class = False
+        class_weights = 1.0
+    elif args.mnist:
+        train_data_a, train_labels_a, \
+        test_data_a, test_labels_a = mnist()
+        train_data_b, train_labels_b, \
+        test_data_b, test_labels_b = svhn()
+
+        # Information about dataset
+        index_one = False # Labels start from 0
+        num_features = None # Not used for CNN
+        num_classes = len(np.unique(train_labels_a))
+        multi_class = False
+        class_weights = 1.0
+
+    # For image data, it's pixels x pixels x channels, e.g. [32,32,3]
+    if args.cnn or args.cnn_da:
+        x_dims = list(train_data_a.shape[1:])
+    # For time-series data, it's time steps x number of features
+    else:
+        x_dims = [time_steps, num_features]
 
     # One-hot encoding
     train_data_a, train_labels_a = one_hot(train_data_a, train_labels_a, num_classes, index_one)
@@ -860,7 +904,8 @@ if __name__ == '__main__':
     test_data_b, test_labels_b = one_hot(test_data_b, test_labels_b, num_classes, index_one)
 
     # Train model using selected dataset and method
-    assert args.lstm + args.vrnn + args.lstm_da + args.vrnn_da == 1, \
+    assert args.lstm + args.vrnn + args.lstm_da + args.vrnn_da \
+        + args.cnn + args.cnn_da == 1, \
         "Must specify exactly one method to run"
 
     if args.lstm:
@@ -879,6 +924,14 @@ if __name__ == '__main__':
         prefix = "vrnn-da"
         adaptation = True
         model_func = build_vrnn
+    elif args.cnn:
+        prefix = "cnn"
+        adaptation = False
+        model_func = build_cnn
+    elif args.cnn_da:
+        prefix = "cnn-da"
+        adaptation = True
+        model_func = build_cnn
 
     # Use the number specified on the command line (higher precidence than --debug)
     if args.debug_num >= 0:
@@ -902,7 +955,7 @@ if __name__ == '__main__':
         model_dir = args.modeldir
         log_dir = args.logdir
 
-    train(data_info,
+    train(num_features, num_classes, x_dims,
             train_data_a, train_labels_a, test_data_a, test_labels_a,
             train_data_b, train_labels_b, test_data_b, test_labels_b,
             model_func=model_func,

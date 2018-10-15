@@ -81,7 +81,7 @@ echo "Getting data: done"
 
 # Install dependencies
 echo "Making sure TensorFlow installed: starting"
-pip install --user tensorflow-gpu pillow lxml jupyter matplotlib pandas sklearn scipy
+pip install --user tensorflow-gpu pillow lxml jupyter matplotlib pandas sklearn scipy python-mnist
 echo "Making sure TensorFlow installed: done"
 
 # Train

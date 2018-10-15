@@ -91,7 +91,7 @@ else
     workon tensorflow_cpu
 fi
 # Seems to hang on numpy without --no-cache-dir?
-pip --no-cache-dir install tensorflow pillow lxml jupyter matplotlib pandas sklearn scipy
+pip --no-cache-dir install tensorflow pillow lxml jupyter matplotlib pandas sklearn scipy python-mnist
 echo "Making sure TensorFlow installed: done"
 
 # Train

@@ -29,6 +29,7 @@ class VRNNCell(tf.contrib.rnn.LayerRNNCell):
         self.n_prior_hidden = z_dim
 
         # What cell we're going to use internally for the RNN
+        # TODO tf.nn.rnn_cell.LSTMCell instead since contrib deprecated?
         self.cell = tf.contrib.rnn.BasicLSTMCell(self.n_h)
              #input_shape=(None, self.n_dec_hidden+self.n_z_1))
 
