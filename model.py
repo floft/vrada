@@ -10,27 +10,40 @@ framework = tf.contrib.framework
 from VRNN import VRNNCell
 from flip_gradient import flip_gradient
 
-def build_rnn(x, keep_prob, layers):
+def build_rnn(x, keep_prob, create_cell, dropout=True, bidirectional=True):
     """
     Multi-layer LSTM
     https://github.com/GarrettHoffman/lstm-oreilly
 
     x, keep_prob - placeholders
-    layers - cell for each layer, e.g. [LSTMCell(...), LSTMCell(...), ...]
+    create_cell - function (e.g. lambda) to generate a cell
+    dropout - if you want to perform dropout
+    bidirectional - if you want to use a bidirectional RNN
     """
+    cells = [create_cell()]
 
-    #drops = [tf.contrib.rnn.DropoutWrapper(l, output_keep_prob=keep_prob) for l in layers]
-    #cell = tf.contrib.rnn.MultiRNNCell(drops)
-    #cell = tf.contrib.rnn.MultiRNNCell(layers)
-    cell = layers[0] # We won't use multiple layers at the moment
+    if dropout:
+        cells = [tf.contrib.rnn.DropoutWrapper(
+            c, output_keep_prob=keep_prob) for c in cells]
 
-    batch_size = tf.shape(x)[0]
-    initial_state = cell.zero_state(batch_size, tf.float32)
+    if bidirectional:
+        # We need two -- one for forward, one for backward
+        cells.append(create_cell())
 
-    # TODO try tf.nn.bidirectional_dynamic_rnn
-    outputs, final_state = tf.nn.dynamic_rnn(cell, x, initial_state=initial_state)
+        outputs, final_state = tf.nn.bidirectional_dynamic_rnn(
+            cells[0], cells[1], x, dtype=tf.float32)
 
-    return initial_state, outputs, cell, final_state
+        # If time_steps=24 and units=100, then:
+        # Outputs before: (?x24x100, ?x24x100)
+        # Outputs after:  (?x24x200)
+        outputs = tf.concat(outputs, axis=-1)
+    else:
+        batch_size = tf.shape(x)[0]
+        initial_state = cells[0].zero_state(batch_size, tf.float32)
+        outputs, final_state = tf.nn.dynamic_rnn(
+            cells[0], x, initial_state=initial_state)
+
+    return outputs, cells, final_state
 
 def classifier(x, num_classes, keep_prob, training, batch_norm):
     """
@@ -245,10 +258,9 @@ def build_lstm(x, y, domain, grl_lambda, keep_prob, training,
     """ LSTM for a baseline """
     # Build LSTM
     with tf.variable_scope("rnn_model"):
-        _, outputs, _, _ = build_rnn(x, keep_prob, [
-            tf.contrib.rnn.BasicLSTMCell(units),
-            #tf.contrib.rnn.LayerNormBasicLSTMCell(100, dropout_keep_prob=keep_prob),
-        ])
+        outputs, _, _ = build_rnn(x, keep_prob,
+            lambda: tf.contrib.rnn.BasicLSTMCell(units))
+            #tf.contrib.rnn.LayerNormBasicLSTMCell(100, dropout_keep_prob=keep_prob)
 
         rnn_output = outputs[:, -1]
 
@@ -279,9 +291,8 @@ def build_vrnn(x, y, domain, grl_lambda, keep_prob, training,
     """ VRNN model """
     # Build VRNN
     with tf.variable_scope("rnn_model"):
-        _, outputs, _, _ = build_rnn(x, keep_prob, [
-            VRNNCell(num_features, units, units, training, batch_norm=False),
-        ])
+        outputs, _, _ = build_rnn(x, keep_prob,
+            lambda: VRNNCell(num_features, units, units, training, batch_norm=False))
         # Note: if you try using more than one layer above, then you need to
         # change the loss since for instance if you put an LSTM layer before
         # the VRNN cell, then no longer is the input to the layer x as
