@@ -256,12 +256,13 @@ def build_model(x, y, domain, grl_lambda, keep_prob, training,
 
 def build_lstm(x, y, domain, grl_lambda, keep_prob, training,
             num_classes, num_features, adaptation, units,
-            multi_class=False, class_weights=1.0):
+            multi_class=False, bidirectional=False, class_weights=1.0):
     """ LSTM for a baseline """
     # Build LSTM
     with tf.variable_scope("rnn_model"):
         outputs, _, _ = build_rnn(x, keep_prob,
-            lambda: tf.contrib.rnn.BasicLSTMCell(units))
+            lambda: tf.contrib.rnn.BasicLSTMCell(units),
+            bidirectional=bidirectional)
             #tf.contrib.rnn.LayerNormBasicLSTMCell(100, dropout_keep_prob=keep_prob)
 
         rnn_output = outputs[:, -1]
@@ -287,14 +288,15 @@ def build_lstm(x, y, domain, grl_lambda, keep_prob, training,
 
 def build_vrnn(x, y, domain, grl_lambda, keep_prob, training,
             num_classes, num_features, adaptation, units,
-            multi_class=False, class_weights=1.0,
+            multi_class=False, bidirectional=False, class_weights=1.0,
             eps=1e-9, use_z=True,
             log_outputs=False, log_weights=False):
     """ VRNN model """
     # Build VRNN
     with tf.variable_scope("rnn_model"):
         outputs, _, _ = build_rnn(x, keep_prob,
-            lambda: VRNNCell(num_features, units, units, training, batch_norm=False))
+            lambda: VRNNCell(num_features, units, units, training, batch_norm=False),
+            bidirectional=bidirectional)
         # Note: if you try using more than one layer above, then you need to
         # change the loss since for instance if you put an LSTM layer before
         # the VRNN cell, then no longer is the input to the layer x as
@@ -405,7 +407,7 @@ def cnn(x, keep_prob):
 
 def build_cnn(x, y, domain, grl_lambda, keep_prob, training,
             num_classes, num_features, adaptation, units,
-            multi_class=False, class_weights=1.0):
+            multi_class=False, bidirectional=False, class_weights=1.0):
     """ CNN for image data rather than time-series data """
     # Build CNN
     with tf.variable_scope("cnn_model"):

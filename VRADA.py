@@ -332,6 +332,7 @@ def train(
         log_extra_save_steps=1000,
         adaptation=True,
         multi_class=False,
+        bidirectional=False,
         class_weights=1.0,
         plot_gradients=False):
 
@@ -383,7 +384,7 @@ def train(
     feature_extractor, model_summaries, extra_model_outputs = \
         model_func(x, y, domain, grl_lambda, keep_prob, training,
             num_classes, num_features, adaptation, units, multi_class,
-            class_weights)
+            bidirectional, class_weights)
 
     # Get variables of model - needed if we train in two steps
     variables = tf.trainable_variables()
@@ -697,6 +698,10 @@ if __name__ == '__main__':
         help="Do not weight loss function with high class imbalances")
     parser.add_argument('--balance-pow', default=1.0, type=float,
         help="For increased balancing, raise weights to a specified power (default 1.0)")
+    parser.add_argument('--bidirectional', dest='bidirectional', action='store_true',
+        help="Use a bidirectional RNN (when selected method includes an RNN)")
+    parser.add_argument('--no-bidirectional', dest='bidirectional', action='store_false',
+        help="Do not use a bidirectional RNN (default)")
     parser.add_argument('--debug', dest='debug', action='store_true',
         help="Start new log/model/images rather than continuing from previous run")
     parser.add_argument('--debug-num', default=-1, type=int,
@@ -707,7 +712,7 @@ if __name__ == '__main__':
         lstm_da=False, vrnn_da=False, cnn_da=False,
         mimic_ahrf=False, mimic_icd9=False, sleep=False,
         trivial_line=False, trivial_sine=False,
-        svhn=False, mnist=False, balance=True, debug=False)
+        svhn=False, mnist=False, balance=True, bidirectional=False, debug=False)
     args = parser.parse_args()
 
     # Load datasets - domains A & B
@@ -910,4 +915,5 @@ if __name__ == '__main__':
             log_validation_accuracy_steps=args.log_steps_val,
             log_extra_save_steps=args.log_steps_slow,
             multi_class=multi_class,
+            bidirectional=args.bidirectional,
             class_weights=class_weights)
