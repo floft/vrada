@@ -388,7 +388,7 @@ def train(
 
     # Get variables of model - needed if we train in two steps
     variables = tf.trainable_variables()
-    rnn_vars = [v for v in variables if 'rnn_model' in v.name]
+    model_vars = [v for v in variables if '_model' in v.name]
     feature_extractor_vars = [v for v in variables if 'feature_extractor' in v.name]
     task_classifier_vars = [v for v in variables if 'task_classifier' in v.name]
     domain_classifier_vars = [v for v in variables if 'domain_classifier' in v.name]
@@ -404,7 +404,7 @@ def train(
             train_all = optimizer.minimize(total_loss)
 
         train_notdomain = optimizer.minimize(total_loss,
-            var_list=rnn_vars+feature_extractor_vars+task_classifier_vars)
+            var_list=model_vars+feature_extractor_vars+task_classifier_vars)
 
         if adaptation:
             train_domain = optimizer.minimize(total_loss,
