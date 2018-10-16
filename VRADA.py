@@ -14,7 +14,6 @@ import pandas as pd
 import tensorflow as tf
 from sklearn.manifold import TSNE
 from sklearn.decomposition import PCA
-#from tensorflow.contrib.tensorboard.plugins import projector
 
 # Make sure matplotlib is not interactive
 import matplotlib as mpl
@@ -29,36 +28,17 @@ from load_data import IteratorInitializerHook, \
     load_data_sleep, load_data_mimiciii_ahrf, load_data_mimiciii_icd9
 from image_datasets import svhn, mnist
 
-def compute_evaluation(sess,
+def update_metrics_on_val(sess,
     eval_input_hook_a, eval_input_hook_b,
     next_data_batch_test_a, next_labels_batch_test_a,
     next_data_batch_test_b, next_labels_batch_test_b,
-    task_accuracy_sum, domain_accuracy_sum,
     source_domain, target_domain,
-    x, y, task_classifier, domain, keep_prob, training,
-    batch_size, auc_labels, auc_predictions, task_auc_all,
-    update_rates_a, update_rates_b):
+    x, y, domain, keep_prob, training,
+    batch_size, update_metrics_a, update_metrics_b):
     """
-    Run all the evaluation data to calculate accuracy and AUC
-
-    We may not be able to fit all the evaluation data into memory, so we'll
-    loop over it in batches and at the end calculate the accuracy.
+    Calculate metrics over all the evaluation data, but batched to make sure
+    we don't run out of memory
     """
-    # Evaluation set in batches (since it may not fit into memory
-    # all at once)
-    task_a = np.zeros((num_classes,), dtype=np.float32)
-    task_b = np.zeros((num_classes,), dtype=np.float32)
-    domain_a = 0
-    domain_b = 0
-    a_total = 0
-    b_total = 0
-
-    # For AUC, we need to keep track of all the predictions
-    auc_a_labels = None
-    auc_a_predictions = None
-    auc_b_labels = None
-    auc_b_predictions = None
-
     # Reinitialize the evaluation batch initializers so we start at
     # the beginning of the evaluation data again
     eval_input_hook_a.iter_init_func(sess)
@@ -83,64 +63,16 @@ def compute_evaluation(sess,
                 batch_target_domain = target_domain
 
             # Log summaries run on the evaluation/validation data
-            feed_dict = {
+            sess.run(update_metrics_a, feed_dict={
                 x: eval_data_a, y: eval_labels_a, domain: batch_source_domain,
                 keep_prob: 1.0, training: False
-            }
-            batch_task_a, batch_domain_a, pred_a = sess.run(
-                [task_accuracy_sum, domain_accuracy_sum, task_classifier],
-                feed_dict=feed_dict)
-            sess.run(update_rates_a, feed_dict=feed_dict)
-
-            feed_dict = {
+            })
+            sess.run(update_metrics_b, feed_dict={
                 x: eval_data_b, y: eval_labels_b, domain: batch_target_domain,
                 keep_prob: 1.0, training: False
-            }
-            batch_task_b, batch_domain_b, pred_b = sess.run(
-                [task_accuracy_sum, domain_accuracy_sum, task_classifier],
-                feed_dict=feed_dict)
-            sess.run(update_rates_b, feed_dict=feed_dict)
-
-            # Update sums for computing accuracy
-            task_a += batch_task_a
-            task_b += batch_task_b
-            domain_a += batch_domain_a
-            domain_b += batch_domain_b
-            a_total += eval_data_a.shape[0]
-            b_total += eval_data_b.shape[0]
-
-            # Save predictions for computing AUC
-            if auc_a_labels is None:
-                auc_a_labels = np.copy(eval_labels_a)
-                auc_a_predictions = np.copy(pred_a)
-                auc_b_labels = np.copy(eval_labels_b)
-                auc_b_predictions = np.copy(pred_b)
-            else:
-                auc_a_labels = np.vstack([auc_a_labels, eval_labels_a])
-                auc_a_predictions = np.vstack([auc_a_predictions, pred_a])
-                auc_b_labels = np.vstack([auc_b_labels, eval_labels_b])
-                auc_b_predictions = np.vstack([auc_b_predictions, pred_b])
+            })
         except tf.errors.OutOfRangeError:
             break
-
-    task_a_accuracy = task_a / a_total
-    domain_a_accuracy = domain_a / a_total
-    task_b_accuracy = task_b / b_total
-    domain_b_accuracy = domain_b / b_total
-
-    # Computing AUC - we could do this out of TensorFlow, but I want to make
-    # sure the calculation is exactly the same as the TensorFlow AUC function
-    # we're using for the training batches
-    task_a_auc = sess.run(task_auc_all, feed_dict={
-        auc_labels: auc_a_labels, auc_predictions: auc_a_predictions
-    })
-    task_b_auc = sess.run(task_auc_all, feed_dict={
-        auc_labels: auc_b_labels, auc_predictions: auc_b_predictions
-    })
-
-    return task_a_accuracy, domain_a_accuracy, \
-        task_b_accuracy, domain_b_accuracy, \
-        task_a_auc, task_b_auc
 
 def evaluation_plots(sess,
     eval_input_hook_a, eval_input_hook_b,
@@ -252,6 +184,115 @@ def create_reset_metric(metric, scope='reset_metrics', **metric_args):
 
     return metric_op, update_op, reset_op
 
+def metric_summaries(domain,
+    task_labels, task_predictions_raw,
+    domain_labels, domain_predictions_raw,
+    num_classes, multi_class=False,
+    datasets=("training", "validation")):
+    """
+    Generate the summaries for a particular domain (e.g. "source" or "target")
+    and for each dataset (e.g. both "training" and "validation") given
+    task and domain labels and predictions and the number of classes.
+
+    This generates both overall and per-class metrics. The computation of overall
+    and per-class accuracy differs for multi-class vs. single-class predictions.
+    """
+    summs = [[] for d in datasets]
+
+    with tf.variable_scope("metrics_%s" % domain):
+        # Depending on if multi-class, what we consider a positive class is different
+        if multi_class:
+            # If multi-class, then each output is a sigmoid independent of the others,
+            # so for each class check >0.5 for predicting a "yes" for that class.
+            per_class_predictions = tf.cast(
+                tf.greater(task_predictions_raw, 0.5), tf.float32)
+
+            # Since multi-class, our overall accuracy from predictions will need to
+            # compare the predictions for each class
+            acc_labels = task_labels
+            acc_predictions = per_class_predictions
+        else:
+            # If only predicting a single class (using softmax), then look for the
+            # max value
+            # e.g. [0.2 0.2 0.4 0.2] -> [0 0 1 0]
+            per_class_predictions = tf.one_hot(
+                tf.argmax(task_predictions_raw, axis=-1), num_classes)
+
+            # For overall accuracy if not multi-class, we want to look at *just*
+            # the argmax; otherwise, if there's a bunch of classes we'll get very
+            # high accuracies due to all the matching zeros.
+            acc_labels = tf.argmax(task_labels, axis=-1,
+                output_type=tf.int32)
+            acc_predictions = tf.argmax(task_predictions_raw, axis=-1,
+                output_type=tf.int32)
+
+        # Domain classification accuracy is always binary
+        domain_acc_labels = tf.argmax(domain_labels, axis=-1,
+            output_type=tf.int32)
+        domain_acc_predictions = tf.argmax(domain_predictions_raw, axis=-1,
+            output_type=tf.int32)
+
+        # Overall metrics
+        task_acc, update_task_acc, reset_task_acc = create_reset_metric(
+            tf.metrics.accuracy, "task_acc",
+            labels=acc_labels, predictions=acc_predictions)
+        task_auc, update_task_auc, reset_task_auc = create_reset_metric(
+            tf.metrics.auc, "task_auc",
+            labels=task_labels, predictions=task_predictions_raw)
+        domain_acc, update_domain_acc, reset_domain_acc = create_reset_metric(
+            tf.metrics.accuracy, "domain_acc",
+            labels=domain_acc_labels, predictions=domain_acc_predictions)
+
+    reset_metrics = [reset_task_acc, reset_task_auc, reset_domain_acc]
+    update_metrics = [update_task_acc, update_task_auc, update_domain_acc]
+
+    for j, dataset in enumerate(datasets):
+        summs[j] += [
+            tf.summary.scalar("auc_task/%s/%s" % (domain, dataset), task_auc),
+            tf.summary.scalar("accuracy_task/%s/%s" % (domain, dataset), task_acc),
+            tf.summary.scalar("accuracy_domain/%s/%s" % (domain, dataset), domain_acc),
+        ]
+
+    # Per-class metrics
+    for i in range(num_classes):
+        with tf.variable_scope("metrics_%s/class_%d" % (domain,i)):
+            # Get ith column (all groundtruth/predictions for ith class)
+            class_y = tf.slice(
+                task_labels, [0,i], [tf.shape(task_labels)[0], 1])
+            class_predictions = tf.slice(
+                per_class_predictions, [0,i], [tf.shape(task_labels)[0], 1])
+
+        for j, dataset in enumerate(datasets):
+            with tf.variable_scope("metrics_%s/class_%d/%s" % (domain,i,dataset)):
+                acc, update_acc, reset_acc = create_reset_metric(
+                    tf.metrics.accuracy, "acc_%d" % j,
+                    labels=class_y, predictions=class_predictions)
+                tp, update_TP, reset_TP = create_reset_metric(
+                    tf.metrics.true_positives, "TP_%d" % j,
+                    labels=class_y, predictions=class_predictions)
+                fp, update_FP, reset_FP = create_reset_metric(
+                    tf.metrics.false_positives, "FP_%d" % j,
+                    labels=class_y, predictions=class_predictions)
+                tn, update_TN, reset_TN = create_reset_metric(
+                    tf.metrics.true_negatives, "TN_%d" % j,
+                    labels=class_y, predictions=class_predictions)
+                fn, update_FN, reset_FN = create_reset_metric(
+                    tf.metrics.false_negatives, "FN_%d" % j,
+                    labels=class_y, predictions=class_predictions)
+
+            reset_metrics += [reset_acc, reset_TP, reset_FP, reset_TN, reset_FN]
+            update_metrics += [update_acc, update_TP, update_FP, update_TN, update_FN]
+
+            summs[j] += [
+                tf.summary.scalar("accuracy_task_class%d/%s/%s" % (i,domain,dataset), acc),
+                tf.summary.scalar("rates_class%d/TP/%s/%s" % (i,domain,dataset), tp),
+                tf.summary.scalar("rates_class%d/FP/%s/%s" % (i,domain,dataset), fp),
+                tf.summary.scalar("rates_class%d/TN/%s/%s" % (i,domain,dataset), tn),
+                tf.summary.scalar("rates_class%d/FN/%s/%s" % (i,domain,dataset), fn),
+            ]
+
+    return reset_metrics, update_metrics, summs
+
 def opt_with_summ(optimizer, loss, var_list=None):
     """
     Run the optimizer, but also create summaries for the gradients (possibly
@@ -264,10 +305,11 @@ def opt_with_summ(optimizer, loss, var_list=None):
     update_step = optimizer.apply_gradients(grads)
 
     # Generate summaries for each gradient
-    for g in grads:
+    # grads = [(grad1, var1), ...]
+    for grad, var in grads:
         # Skip those whose gradient is not computed (i.e. not in var list above)
-        if g[0] is not None:
-            summaries.append(tf.summary.histogram("{}-grad".format(g[1].name), g))
+        if grad is not None:
+            summaries.append(tf.summary.histogram("{}-grad".format(var.name), grad))
 
     return update_step, summaries
 
@@ -343,43 +385,6 @@ def train(
             num_classes, num_features, adaptation, units, multi_class,
             class_weights)
 
-    # Depending on if multi-class, what we consider a positive class is different
-    if multi_class:
-        # If multi-class, then each output is a sigmoid independent of the others,
-        # so for each class check >0.5 for predicting a "yes" for that class.
-        predictions = tf.cast(tf.greater(task_classifier, 0.5), tf.float32)
-    else:
-        # If only predicting a single class (using softmax), then look for the
-        # max value
-        # e.g. [0.2 0.2 0.4 0.2] -> [0 0 1 0]
-        predictions = tf.one_hot(tf.argmax(task_classifier, axis=-1), num_classes)
-
-    # Accuracy of the classifiers -- https://stackoverflow.com/a/42608050/2698494
-    #
-    # Note: we also calculate the *sum* (not just the mean), since we need to
-    # run these multiple times if we can't fit the entire validation set into
-    # memory. Then afterwards we can divide by the size of the validation set.
-    with tf.variable_scope("task_accuracy"):
-        equals = tf.cast(tf.equal(y, predictions), tf.float32)
-        task_accuracy_sum = tf.reduce_sum(equals, axis=0)
-        task_accuracy = tf.reduce_mean(equals, axis=0)
-        task_accuracy_avg = tf.reduce_mean(task_accuracy)
-    with tf.variable_scope("domain_accuracy"):
-        equals = tf.cast(
-            tf.equal(tf.argmax(domain, axis=-1), tf.argmax(domain_classifier, axis=-1)),
-        tf.float32)
-        domain_accuracy_sum = tf.reduce_sum(equals)
-        domain_accuracy = tf.reduce_mean(equals)
-
-    # Also compute AUC since that's what's given in some papers
-    with tf.variable_scope("task_auc"):
-        _, task_auc = tf.metrics.auc(labels=y, predictions=task_classifier)
-
-        # Or, via placeholders if doing it in multiple batches
-        auc_labels = tf.placeholder(tf.float32, [None, num_classes], name='labels')
-        auc_predictions = tf.placeholder(tf.float32, [None, num_classes], name='predictions')
-        _, task_auc_all = tf.metrics.auc(labels=auc_labels, predictions=auc_predictions)
-
     # Get variables of model - needed if we train in two steps
     variables = tf.trainable_variables()
     rnn_vars = [v for v in variables if 'rnn_model' in v.name]
@@ -388,11 +393,12 @@ def train(
     domain_classifier_vars = [v for v in variables if 'domain_classifier' in v.name]
 
     # Optimizer - update ops for batch norm layers
-    with tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
+    with tf.variable_scope("optimizer"), \
+        tf.control_dependencies(tf.get_collection(tf.GraphKeys.UPDATE_OPS)):
         optimizer = tf.train.AdamOptimizer(lr)
 
         if plot_gradients:
-            train_all, train_all_summs = opt_with_summ(optimizer, total_loss)
+            train_all, grad_summs = opt_with_summ(optimizer, total_loss)
         else:
             train_all = optimizer.minimize(total_loss)
 
@@ -404,100 +410,38 @@ def train(
                 var_list=domain_classifier_vars)
 
     # Summaries - training and evaluation for both domains A and B
-    training_a_summs = [
-        tf.summary.scalar("loss/total_loss", total_loss),
-        tf.summary.scalar("auc_task/source/training", task_auc),
-        tf.summary.scalar("accuracy_task_avg/source/training", task_accuracy_avg),
-        tf.summary.scalar("accuracy_domain/source/training", domain_accuracy),
-    ]
-    training_b_summs = [
-        tf.summary.scalar("auc_task/target/training", task_auc),
-        tf.summary.scalar("accuracy_task_avg/target/training", task_accuracy_avg),
-        tf.summary.scalar("accuracy_domain/target/training", domain_accuracy),
-    ]
+    #
+    # Most will be using tf.metrics... as updatable/resetable. Thus, we'll first
+    # run reset_metrics followed by the update_metrics_{a,b} (optionally over
+    # multiple batches, e.g. if for the entire validation dataset). Then we
+    # run and log the summaries.
+    train_a_summs = [tf.summary.scalar("loss/total_loss", total_loss)]
 
-    # Per-class metrics
-    reset_rates = []
-    update_rates = [[], []] # do two domains separately
-    val_a_summs = []
-    val_b_summs = []
+    reset_a, update_metrics_a, summs = metric_summaries(
+        "source", y, task_classifier, domain, domain_classifier,
+        num_classes, multi_class)
+    train_a_summs += summs[0]
+    val_a_summs = summs[1]
 
-    for i in range(num_classes):
-        with tf.variable_scope("per_class_metrics/class_%d" % i):
-            # The one value for the ith class
-            class_acc = tf.reshape(tf.slice(task_accuracy, [i], [1]), [])
-            # Get ith column (all groundtruth/predictions for ith class)
-            class_y = tf.slice(y, [0,i], [tf.shape(y)[0], 1])
-            class_predictions = tf.slice(predictions, [0,i], [tf.shape(y)[0], 1])
+    reset_b, update_metrics_b, summs = metric_summaries(
+        "target", y, task_classifier, domain, domain_classifier,
+        num_classes, multi_class)
+    train_b_summs = summs[0]
+    val_b_summs = summs[1]
 
-            # For high class imbalances, it's useful to see how many false
-            # positives/negatives there are
-            # Note: create resetable metrics
-            true_positives = []
-            false_positives = []
-            true_negatives = []
-            false_negatives = []
-            for j in range(2):
-                tp, update_TP, reset_TP = create_reset_metric(
-                    tf.metrics.true_positives, "TP_%d" % j,
-                    labels=class_y, predictions=class_predictions)
-                fp, update_FP, reset_FP = create_reset_metric(
-                    tf.metrics.false_positives, "FP_%d" % j,
-                    labels=class_y, predictions=class_predictions)
-                tn, update_TN, reset_TN = create_reset_metric(
-                    tf.metrics.true_negatives, "TN_%d" % j,
-                    labels=class_y, predictions=class_predictions)
-                fn, update_FN, reset_FN = create_reset_metric(
-                    tf.metrics.false_negatives, "FN_%d" % j,
-                    labels=class_y, predictions=class_predictions)
-                true_positives.append(tp)
-                false_positives.append(fp)
-                true_negatives.append(tn)
-                false_negatives.append(fn)
-                reset_rates += [reset_TP, reset_FP, reset_TN, reset_FN]
-                update_rates[j] += [update_TP, update_FP, update_TN, update_FN]
+    reset_metrics = reset_a + reset_b
 
-        training_a_summs += [
-            tf.summary.scalar("accuracy_task_class%d/source/training" % i, class_acc),
-            tf.summary.scalar("rates_class%d/FP/source/training" % i, false_positives[0]),
-            tf.summary.scalar("rates_class%d/TP/source/training" % i, true_positives[0]),
-            tf.summary.scalar("rates_class%d/FN/source/training" % i, false_negatives[0]),
-            tf.summary.scalar("rates_class%d/TN/source/training" % i, true_negatives[0]),
-        ]
-        val_a_summs += [
-            tf.summary.scalar("rates_class%d/FP/source/validation" % i, false_positives[0]),
-            tf.summary.scalar("rates_class%d/TP/source/validation" % i, true_positives[0]),
-            tf.summary.scalar("rates_class%d/FN/source/validation" % i, false_negatives[0]),
-            tf.summary.scalar("rates_class%d/TN/source/validation" % i, true_negatives[0]),
-        ]
-        training_b_summs += [
-            tf.summary.scalar("accuracy_task_class%d/target/training" % i, class_acc),
-            tf.summary.scalar("rates_class%d/FP/target/training" % i, false_positives[1]),
-            tf.summary.scalar("rates_class%d/TP/target/training" % i, true_positives[1]),
-            tf.summary.scalar("rates_class%d/FN/target/training" % i, false_negatives[1]),
-            tf.summary.scalar("rates_class%d/TN/target/training" % i, true_negatives[1]),
-        ]
-        val_b_summs += [
-            tf.summary.scalar("rates_class%d/FP/target/validation" % i, false_positives[1]),
-            tf.summary.scalar("rates_class%d/TP/target/validation" % i, true_positives[1]),
-            tf.summary.scalar("rates_class%d/FN/target/validation" % i, false_negatives[1]),
-            tf.summary.scalar("rates_class%d/TN/target/validation" % i, true_negatives[1]),
-        ]
-
-    update_rates_a, update_rates_b = update_rates
-    training_summaries_extra_a = tf.summary.merge(model_summaries)
-    training_summaries_b = tf.summary.merge(training_b_summs)
-    validation_summaries_a = tf.summary.merge(val_a_summs)
-    validation_summaries_b = tf.summary.merge(val_b_summs)
-
-    # If we ant to plot gradients, include both the training summaries and
+    # If we want to plot gradients, include both the training summaries and
     # gradient summaries
     if plot_gradients:
-        training_summaries_a = tf.summary.merge(
-            training_a_summs + train_all_summs
-        )
+        training_summaries_a = tf.summary.merge(train_a_summs+grad_summs)
     else:
-        training_summaries_a = tf.summary.merge(training_a_summs)
+        training_summaries_a = tf.summary.merge(train_a_summs)
+
+    training_summaries_extra_a = tf.summary.merge(model_summaries)
+    training_summaries_b = tf.summary.merge(train_b_summs)
+    validation_summaries_a = tf.summary.merge(val_a_summs)
+    validation_summaries_b = tf.summary.merge(val_b_summs)
 
     # Allow restoring global_step from past run
     global_step = tf.Variable(0, name="global_step", trainable=False)
@@ -578,13 +522,13 @@ def train(
 
                 # Log summaries run on the training data
                 #
-                # Reset some metrics (TP,...) and then update when running
+                # Reset metrics, update metrics, then generate summaries
                 feed_dict = {
                     x: data_batch_a, y: labels_batch_a, domain: source_domain,
                     keep_prob: 1.0, training: False
                 }
-                sess.run(reset_rates)
-                sess.run(update_rates_a, feed_dict=feed_dict)
+                sess.run(reset_metrics)
+                sess.run(update_metrics_a, feed_dict=feed_dict)
                 summ = sess.run(training_summaries_a, feed_dict=feed_dict)
                 writer.add_summary(summ, step)
 
@@ -592,75 +536,24 @@ def train(
                     x: data_batch_b, y: labels_batch_b, domain: target_domain,
                     keep_prob: 1.0, training: False
                 }
-                sess.run(update_rates_b, feed_dict=feed_dict)
+                sess.run(update_metrics_b, feed_dict=feed_dict)
                 summ = sess.run(training_summaries_b, feed_dict=feed_dict)
                 writer.add_summary(summ, step)
 
             # Log validation accuracy/AUC less frequently
             if i%log_validation_accuracy_steps == 0:
                 # Evaluation accuracy, AUC, rates, etc.
-                sess.run(reset_rates)
-                task_a_accuracy, domain_a_accuracy, \
-                task_b_accuracy, domain_b_accuracy, \
-                task_a_auc, task_b_auc = compute_evaluation(sess,
+                sess.run(reset_metrics)
+                update_metrics_on_val(sess,
                     eval_input_hook_a, eval_input_hook_b,
                     next_data_batch_test_a, next_labels_batch_test_a,
                     next_data_batch_test_b, next_labels_batch_test_b,
-                    task_accuracy_sum, domain_accuracy_sum,
                     source_domain, target_domain,
-                    x, y, task_classifier, domain, keep_prob, training,
-                    batch_size, auc_labels, auc_predictions, task_auc_all,
-                    update_rates_a, update_rates_b)
-
-                task_source_val = []
-                for j in range(num_classes):
-                    task_source_val += [tf.Summary(value=[tf.Summary.Value(
-                        tag="accuracy_task_class%d/source/validation" % j,
-                        simple_value=task_a_accuracy[j]
-                    )])]
-                task_source_val_avg = tf.Summary(value=[tf.Summary.Value(
-                        tag="accuracy_task_avg/source/validation",
-                        simple_value=np.mean(task_a_accuracy)
-                    )])
-                domain_source_val = tf.Summary(value=[tf.Summary.Value(
-                    tag="accuracy_domain/source/validation",
-                    simple_value=domain_a_accuracy
-                )])
-                task_source_auc_val = tf.Summary(value=[tf.Summary.Value(
-                    tag="auc_task/source/validation",
-                    simple_value=task_a_auc
-                )])
-                task_target_val = []
-                for j in range(num_classes):
-                    task_target_val += [tf.Summary(value=[tf.Summary.Value(
-                        tag="accuracy_task_class%d/target/validation" % j,
-                        simple_value=task_b_accuracy[j]
-                    )])]
-                task_target_val_avg = tf.Summary(value=[tf.Summary.Value(
-                        tag="accuracy_task_avg/target/validation",
-                        simple_value=np.mean(task_b_accuracy)
-                    )])
-                domain_target_val = tf.Summary(value=[tf.Summary.Value(
-                    tag="accuracy_domain/target/validation",
-                    simple_value=domain_b_accuracy
-                )])
-                task_target_auc_val = tf.Summary(value=[tf.Summary.Value(
-                    tag="auc_task/target/validation",
-                    simple_value=task_b_auc
-                )])
-                for s in task_source_val:
-                    writer.add_summary(s, step)
-                writer.add_summary(task_source_val_avg, step)
-                writer.add_summary(domain_source_val, step)
-                writer.add_summary(task_source_auc_val, step)
-                for s in task_target_val:
-                    writer.add_summary(s, step)
-                writer.add_summary(task_target_val_avg, step)
-                writer.add_summary(domain_target_val, step)
-                writer.add_summary(task_target_auc_val, step)
+                    x, y, domain, keep_prob, training,
+                    batch_size, update_metrics_a, update_metrics_b)
 
                 # Add the summaries about rates that were updated above in the
-                # evaluation function (via update_rates list)
+                # evaluation function (via update_metrics_* lists)
                 summs_a, summs_b = sess.run([
                     validation_summaries_a, validation_summaries_b])
                 writer.add_summary(summs_a, step)
