@@ -11,6 +11,10 @@ def plot_embedding(x, y, d, title=None, filename=None):
     x_min, x_max = np.min(x, 0), np.max(x, 0)
     x = (x - x_min) / (x_max - x_min)
 
+    # We'd get an error if nan or inf
+    if np.isnan(x).any() or np.isinf(x).any():
+        return None
+
     # XKCD colors: https://matplotlib.org/users/colors.html
     colors = {
         0: 'xkcd:orange', # source

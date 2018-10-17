@@ -34,23 +34,35 @@ def update_metrics_on_val(sess,
     next_data_batch_test_b, next_labels_batch_test_b,
     source_domain, target_domain,
     x, y, domain, keep_prob, training,
-    batch_size, update_metrics_a, update_metrics_b):
+    batch_size, update_metrics_a, update_metrics_b,
+    max_examples):
     """
     Calculate metrics over all the evaluation data, but batched to make sure
     we don't run out of memory
+
+    Note: if max_examples is less than the total number of validation examples,
+    it'll take the first max_examples.
     """
+    # Keep track of how many samples we've evaluated so far
+    examples = 0
+
     # Reinitialize the evaluation batch initializers so we start at
     # the beginning of the evaluation data again
     eval_input_hook_a.iter_init_func(sess)
     eval_input_hook_b.iter_init_func(sess)
 
-    while True:
+    # We'll break if we either evaluate all of the evaluation data and thus
+    # get the out of range TensorFlow exception or of we have now evaluated
+    # at least the number we wanted to.
+    while examples < max_examples:
         try:
             # Get next evaluation batch
             eval_data_a, eval_labels_a, eval_data_b, eval_labels_b = sess.run([
                 next_data_batch_test_a, next_labels_batch_test_a,
                 next_data_batch_test_b, next_labels_batch_test_b,
             ])
+
+            examples += eval_data_a.shape[0]
 
             # If the number of evaluation examples is not divisible by the batch
             # size, then the last one will not be a full batch. Thus, we'll need
@@ -123,8 +135,10 @@ def evaluation_plots(sess,
         title=title + " - PCA", filename=pca_filename)
 
     plots = []
-    plots.append(('tsne', tsne_plot))
-    plots.append(('pca', pca_plot))
+    if tsne_plot is not None:
+        plots.append(('tsne', tsne_plot))
+    if pca_plot is not None:
+        plots.append(('pca', pca_plot))
 
     # Output time-series "reconstructions" from our generator (if VRNN and we
     # only have a single-dimensional x, e.g. in the "trivial" datasets)
@@ -335,7 +349,9 @@ def train(
         bidirectional=False,
         class_weights=1.0,
         plot_gradients=False,
-        use_grl=True):
+        use_grl=True,
+        min_domain_accuracy=0.60,
+        max_examples=5000):
 
     if not os.path.exists(model_dir):
         os.makedirs(model_dir)
@@ -393,6 +409,17 @@ def train(
     feature_extractor_vars = [v for v in variables if 'feature_extractor' in v.name]
     task_classifier_vars = [v for v in variables if 'task_classifier' in v.name]
     domain_classifier_vars = [v for v in variables if 'domain_classifier' in v.name]
+
+    # If the discriminator has lower than a certain accuracy on classifying which
+    # domain a feature output was from, then we'll train that and skip training
+    # the rest of the model. Thus, we need a quick way to calculate this for
+    # the training batch. For evaluation I'll use tf.metrics but for this during
+    # training I'll compute manually for simplicity.
+    with tf.variable_scope("domain_accuracy"):
+        domain_accuracy = tf.reduce_mean(tf.cast(tf.equal(
+                tf.argmax(domain, axis=-1),
+                tf.argmax(domain_classifier, axis=-1)),
+            tf.float32))
 
     # Optimizer - update ops for batch norm layers
     with tf.variable_scope("optimizer"), \
@@ -513,17 +540,26 @@ def train(
                     combined_domain_flip = np.concatenate((target_domain, source_domain), axis=0)
 
                     # Train only the domain predictor / discriminator
-                    sess.run(train_domain, feed_dict={
-                        x: combined_x, y: combined_labels, domain: combined_domain,
+                    feed_dict={
+                        x: combined_x, domain: combined_domain,
                         keep_prob: dropout_keep_prob, lr: lr_multiplier*lr_value, training: True
-                    })
+                    }
+                    sess.run(train_domain, feed_dict=feed_dict)
+                    domain_acc = sess.run(domain_accuracy, feed_dict=feed_dict)
 
-                    # Train everything except the domain predictor / discriminator but
-                    # flip labels rather than using GRL (i.e. set lambda=-1)
-                    sess.run(train_notdomain, feed_dict={
-                        x: combined_x, y: combined_labels, domain: combined_domain_flip,
-                        keep_prob: dropout_keep_prob, lr: lr_value, training: True
-                    })
+                    print("Iteration", i, "domain acc", domain_acc)
+
+                    # Don't update the rest of the model if the discriminator is
+                    # still really bad -- otherwise its gradient may not be helpful
+                    # for adaptation
+                    if domain_acc > min_domain_accuracy:
+                        print("    Training rest of model")
+                        # Train everything except the domain predictor / discriminator but
+                        # flip labels rather than using GRL (i.e. set lambda=-1)
+                        sess.run(train_notdomain, feed_dict={
+                            x: combined_x, y: combined_labels, domain: combined_domain_flip,
+                            keep_prob: dropout_keep_prob, lr: lr_value, training: True
+                        })
             else:
                 # Train task classifier on source domain to be correct
                 sess.run(train_notdomain, feed_dict={
@@ -582,7 +618,8 @@ def train(
                     next_data_batch_test_b, next_labels_batch_test_b,
                     source_domain, target_domain,
                     x, y, domain, keep_prob, training,
-                    batch_size, update_metrics_a, update_metrics_b)
+                    batch_size, update_metrics_a, update_metrics_b,
+                    max_examples)
 
                 # Add the summaries about rates that were updated above in the
                 # evaluation function (via update_metrics_* lists)
@@ -751,6 +788,8 @@ if __name__ == '__main__':
         help="Log validation accuracy and AUC every so many steps (default 1000)")
     parser.add_argument('--log-steps-extra', default=1000, type=int,
         help="Log weights, plots, etc. every so many steps (default 1000)")
+    parser.add_argument('--max-examples', default=5000, type=int,
+        help="Max number of examples to evaluate for validation (default 5000)")
     parser.add_argument('--balance', dest='balance', action='store_true',
         help="On high class imbalances (e.g. MIMIC-III) weight the loss function (default)")
     parser.add_argument('--no-balance', dest='balance', action='store_false',
@@ -981,4 +1020,5 @@ if __name__ == '__main__':
             multi_class=multi_class,
             bidirectional=args.bidirectional,
             class_weights=class_weights,
-            use_grl=args.grl)
+            use_grl=args.grl,
+            max_examples=args.max_examples)
