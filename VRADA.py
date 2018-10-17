@@ -327,14 +327,15 @@ def train(
         model_dir="models",
         log_dir="logs",
         model_save_steps=1000,
-        log_save_steps=50,
-        log_validation_accuracy_steps=250,
+        log_save_steps=100,
+        log_validation_accuracy_steps=1000,
         log_extra_save_steps=1000,
         adaptation=True,
         multi_class=False,
         bidirectional=False,
         class_weights=1.0,
-        plot_gradients=False):
+        plot_gradients=False,
+        use_grl=True):
 
     if not os.path.exists(model_dir):
         os.makedirs(model_dir)
@@ -384,7 +385,7 @@ def train(
     feature_extractor, model_summaries, extra_model_outputs = \
         model_func(x, y, domain, grl_lambda, keep_prob, training,
             num_classes, num_features, adaptation, units, multi_class,
-            bidirectional, class_weights)
+            bidirectional, class_weights, use_grl)
 
     # Get variables of model - needed if we train in two steps
     variables = tf.trainable_variables()
@@ -486,25 +487,43 @@ def train(
                 combined_labels = np.concatenate((labels_batch_a, np.zeros(labels_batch_b.shape)), axis=0)
                 combined_domain = np.concatenate((source_domain, target_domain), axis=0)
 
-                # Train everything in one step and domain more next. This seemed
-                # to work better for me than just nondomain then domain, though
-                # it seems likely the results would be similar.
-                sess.run(train_all, feed_dict={
-                    x: combined_x, y: combined_labels, domain: combined_domain,
-                    grl_lambda: grl_lambda_value,
-                    keep_prob: dropout_keep_prob, lr: lr_value, training: True
-                })
+                if use_grl:
+                    # Train everything in one step and domain more next. This seemed
+                    # to work better for me than just nondomain then domain, though
+                    # it seems likely the results would be similar.
+                    sess.run(train_all, feed_dict={
+                        x: combined_x, y: combined_labels, domain: combined_domain,
+                        grl_lambda: grl_lambda_value,
+                        keep_prob: dropout_keep_prob, lr: lr_value, training: True
+                    })
 
-                # Update domain more
-                #
-                # Depending on the num_steps, your learning rate, etc. it may be
-                # beneficial to have a different learning rate here -- hence the
-                # lr_multiplier option. This may also depend on your dataset though.
-                sess.run(train_domain, feed_dict={
-                    x: combined_x, y: combined_labels, domain: combined_domain,
-                    grl_lambda: 0.0,
-                    keep_prob: dropout_keep_prob, lr: lr_multiplier*lr_value, training: True
-                })
+                    # Update domain more
+                    #
+                    # Depending on the num_steps, your learning rate, etc. it may be
+                    # beneficial to have a different learning rate here -- hence the
+                    # lr_multiplier option. This may also depend on your dataset though.
+                    sess.run(train_domain, feed_dict={
+                        x: combined_x, y: combined_labels, domain: combined_domain,
+                        grl_lambda: 0.0,
+                        keep_prob: dropout_keep_prob, lr: lr_multiplier*lr_value, training: True
+                    })
+                else:
+                    # An alternative to using a gradient reversal layer is through
+                    # flipping the labels -- the approach used in CyCADA
+                    combined_domain_flip = np.concatenate((target_domain, source_domain), axis=0)
+
+                    # Train only the domain predictor / discriminator
+                    sess.run(train_domain, feed_dict={
+                        x: combined_x, y: combined_labels, domain: combined_domain,
+                        keep_prob: dropout_keep_prob, lr: lr_multiplier*lr_value, training: True
+                    })
+
+                    # Train everything except the domain predictor / discriminator but
+                    # flip labels rather than using GRL (i.e. set lambda=-1)
+                    sess.run(train_notdomain, feed_dict={
+                        x: combined_x, y: combined_labels, domain: combined_domain_flip,
+                        keep_prob: dropout_keep_prob, lr: lr_value, training: True
+                    })
             else:
                 # Train task classifier on source domain to be correct
                 sess.run(train_notdomain, feed_dict={
@@ -517,9 +536,11 @@ def train(
             if i%log_save_steps == 0:
                 # Log the step time
                 summ = tf.Summary(value=[
-                    tf.Summary.Value(tag="step_time", simple_value=t)
+                    tf.Summary.Value(tag="step_time/model_train", simple_value=t)
                 ])
                 writer.add_summary(summ, step)
+
+                t = time.time()
 
                 # Log summaries run on the training data
                 #
@@ -541,8 +562,18 @@ def train(
                 summ = sess.run(training_summaries_b, feed_dict=feed_dict)
                 writer.add_summary(summ, step)
 
+                t = time.time() - t
+
+                # Log the time to update metrics
+                summ = tf.Summary(value=[
+                    tf.Summary.Value(tag="step_time/metrics/training", simple_value=t)
+                ])
+                writer.add_summary(summ, step)
+
             # Log validation accuracy/AUC less frequently
             if i%log_validation_accuracy_steps == 0:
+                t = time.time()
+
                 # Evaluation accuracy, AUC, rates, etc.
                 sess.run(reset_metrics)
                 update_metrics_on_val(sess,
@@ -560,14 +591,34 @@ def train(
                 writer.add_summary(summs_a, step)
                 writer.add_summary(summs_b, step)
 
+                t = time.time() - t
+
+                # Log the time to update metrics
+                summ = tf.Summary(value=[
+                    tf.Summary.Value(tag="step_time/metrics/validation", simple_value=t)
+                ])
+                writer.add_summary(summ, step)
+
             # Larger stuff like weights and t-SNE plots occasionally
             if i%log_extra_save_steps == 0:
+                t = time.time()
+
                 # Training weights
                 summ = sess.run(training_summaries_extra_a, feed_dict={
                     x: data_batch_a, y: labels_batch_a, domain: source_domain,
                     keep_prob: 1.0, training: False
                 })
                 writer.add_summary(summ, step)
+
+                t = time.time() - t
+
+                # Log the time to update metrics
+                summ = tf.Summary(value=[
+                    tf.Summary.Value(tag="step_time/extra", simple_value=t)
+                ])
+                writer.add_summary(summ, step)
+
+                t = time.time()
 
                 # t-SNE, PCA, and VRNN reconstruction plots
                 first_step = i==0 # only plot real ones once
@@ -585,6 +636,14 @@ def train(
                     summ = tf.Summary(value=[tf.Summary.Value(
                         tag=name, image=plot)])
                     writer.add_summary(summ, step)
+
+                t = time.time() - t
+
+                # Log the time to update metrics
+                summ = tf.Summary(value=[
+                    tf.Summary.Value(tag="step_time/plots", simple_value=t)
+                ])
+                writer.add_summary(summ, step)
 
                 # Make sure we write to disk before too long so we can monitor live in
                 # TensorBoard. If it's too delayed we won't be able to detect problems
@@ -686,11 +745,11 @@ if __name__ == '__main__':
         help="Keep probability for dropout (default 0.8)")
     parser.add_argument('--model-steps', default=1000, type=int,
         help="Save the model every so many steps (default 1000)")
-    parser.add_argument('--log-steps', default=50, type=int,
-        help="Log training losses and accuracy every so many steps (default 50)")
-    parser.add_argument('--log-steps-val', default=250, type=int,
-        help="Log validation accuracy and AUC every so many steps (default 250)")
-    parser.add_argument('--log-steps-slow', default=1000, type=int,
+    parser.add_argument('--log-steps', default=100, type=int,
+        help="Log training losses and accuracy every so many steps (default 100)")
+    parser.add_argument('--log-steps-val', default=1000, type=int,
+        help="Log validation accuracy and AUC every so many steps (default 1000)")
+    parser.add_argument('--log-steps-extra', default=1000, type=int,
         help="Log weights, plots, etc. every so many steps (default 1000)")
     parser.add_argument('--balance', dest='balance', action='store_true',
         help="On high class imbalances (e.g. MIMIC-III) weight the loss function (default)")
@@ -702,6 +761,10 @@ if __name__ == '__main__':
         help="Use a bidirectional RNN (when selected method includes an RNN)")
     parser.add_argument('--no-bidirectional', dest='bidirectional', action='store_false',
         help="Do not use a bidirectional RNN (default)")
+    parser.add_argument('--grl', dest='grl', action='store_true',
+        help="Use a gradient reversal layer for adaptation (default)")
+    parser.add_argument('--no-grl', dest='grl', action='store_false',
+        help="Do not use a gradient reversal layer for adaptation, instead use label flipping")
     parser.add_argument('--debug', dest='debug', action='store_true',
         help="Start new log/model/images rather than continuing from previous run")
     parser.add_argument('--debug-num', default=-1, type=int,
@@ -712,7 +775,8 @@ if __name__ == '__main__':
         lstm_da=False, vrnn_da=False, cnn_da=False,
         mimic_ahrf=False, mimic_icd9=False, sleep=False,
         trivial_line=False, trivial_sine=False,
-        svhn=False, mnist=False, balance=True, bidirectional=False, debug=False)
+        svhn=False, mnist=False, balance=True, bidirectional=False,
+        grl=True, debug=False)
     args = parser.parse_args()
 
     # Load datasets - domains A & B
@@ -913,7 +977,8 @@ if __name__ == '__main__':
             model_save_steps=args.model_steps,
             log_save_steps=args.log_steps,
             log_validation_accuracy_steps=args.log_steps_val,
-            log_extra_save_steps=args.log_steps_slow,
+            log_extra_save_steps=args.log_steps_extra,
             multi_class=multi_class,
             bidirectional=args.bidirectional,
-            class_weights=class_weights)
+            class_weights=class_weights,
+            use_grl=args.grl)

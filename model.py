@@ -89,7 +89,8 @@ def classifier(x, num_classes, keep_prob, training, batch_norm):
 
 def build_model(x, y, domain, grl_lambda, keep_prob, training,
         num_classes, adaptation=True, multi_class=False, class_weights=1.0,
-        batch_norm=False, two_domain_classifiers=False, log_outputs=True):
+        batch_norm=False, two_domain_classifiers=False, log_outputs=True,
+        use_grl=True):
     """
     Creates the feature extractor, task classifier, domain classifier
 
@@ -138,14 +139,24 @@ def build_model(x, y, domain, grl_lambda, keep_prob, training,
     # Also pass output to domain classifier
     # Note: always have 2 domains, so set outputs to 2
     with tf.variable_scope("domain_classifier"):
-        gradient_reversal_layer = flip_gradient(feature_extractor, grl_lambda)
+        # Optionally bypass using a GRL
+        if use_grl:
+            gradient_reversal_layer = flip_gradient(feature_extractor, grl_lambda)
+        else:
+            gradient_reversal_layer = feature_extractor
+
         domain_classifier, domain_softmax, _ = classifier(
             gradient_reversal_layer, 2, keep_prob, training, batch_norm)
 
     # Maybe try one before the feature extractor too
     if two_domain_classifiers:
         with tf.variable_scope("domain_classifier2"):
-            gradient_reversal_layer2 = flip_gradient(x, grl_lambda)
+            # Optionally bypass using a GRL
+            if use_grl:
+                gradient_reversal_layer2 = flip_gradient(x, grl_lambda)
+            else:
+                gradient_reversal_layer2 = x
+
             domain_classifier2, _, _ = classifier(
                 gradient_reversal_layer2, 2, keep_prob, training, batch_norm)
 
@@ -256,7 +267,8 @@ def build_model(x, y, domain, grl_lambda, keep_prob, training,
 
 def build_lstm(x, y, domain, grl_lambda, keep_prob, training,
             num_classes, num_features, adaptation, units,
-            multi_class=False, bidirectional=False, class_weights=1.0):
+            multi_class=False, bidirectional=False, class_weights=1.0,
+            use_grl=True):
     """ LSTM for a baseline """
     # Build LSTM
     with tf.variable_scope("rnn_model"):
@@ -271,7 +283,8 @@ def build_lstm(x, y, domain, grl_lambda, keep_prob, training,
     task_output, domain_softmax, task_loss, domain_loss, \
         feature_extractor, summaries = build_model(
             rnn_output, y, domain, grl_lambda, keep_prob, training,
-            num_classes, adaptation, multi_class, class_weights)
+            num_classes, adaptation, multi_class, class_weights,
+            use_grl=use_grl)
 
     # Total loss is the sum
     with tf.variable_scope("total_loss"):
@@ -289,7 +302,7 @@ def build_lstm(x, y, domain, grl_lambda, keep_prob, training,
 def build_vrnn(x, y, domain, grl_lambda, keep_prob, training,
             num_classes, num_features, adaptation, units,
             multi_class=False, bidirectional=False, class_weights=1.0,
-            eps=1e-9, use_z=True,
+            use_grl=True, eps=1e-9, use_z=True,
             log_outputs=False, log_weights=False):
     """ VRNN model """
     # Build VRNN
@@ -321,7 +334,8 @@ def build_vrnn(x, y, domain, grl_lambda, keep_prob, training,
     task_output, domain_softmax, task_loss, domain_loss, \
         feature_extractor, summaries = build_model(
             rnn_output, y, domain, grl_lambda, keep_prob, training,
-            num_classes, adaptation, multi_class, class_weights)
+            num_classes, adaptation, multi_class, class_weights,
+            use_grl=use_grl)
 
     # Loss
     #
@@ -407,7 +421,8 @@ def cnn(x, keep_prob):
 
 def build_cnn(x, y, domain, grl_lambda, keep_prob, training,
             num_classes, num_features, adaptation, units,
-            multi_class=False, bidirectional=False, class_weights=1.0):
+            multi_class=False, bidirectional=False, class_weights=1.0,
+            use_grl=True):
     """ CNN for image data rather than time-series data """
     # Build CNN
     with tf.variable_scope("cnn_model"):
@@ -417,7 +432,8 @@ def build_cnn(x, y, domain, grl_lambda, keep_prob, training,
     task_output, domain_softmax, task_loss, domain_loss, \
         feature_extractor, summaries = build_model(
             cnn_output, y, domain, grl_lambda, keep_prob, training,
-            num_classes, adaptation, multi_class, class_weights)
+            num_classes, adaptation, multi_class, class_weights,
+            use_grl=use_grl)
 
     # Total loss is the sum
     with tf.variable_scope("total_loss"):
