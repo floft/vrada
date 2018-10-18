@@ -32,7 +32,6 @@ def update_metrics_on_val(sess,
     eval_input_hook_a, eval_input_hook_b,
     next_data_batch_test_a, next_labels_batch_test_a,
     next_data_batch_test_b, next_labels_batch_test_b,
-    source_domain, target_domain,
     x, y, domain, keep_prob, training,
     batch_size, update_metrics_a, update_metrics_b,
     max_examples):
@@ -63,35 +62,29 @@ def update_metrics_on_val(sess,
             ])
 
             # Make sure we don't go over the desired number of examples
-            #
-            # Note: we'll use the number of in domain A since we'll assume our
-            # batch sizes for both are the same.
+            diff = max_examples - examples
+
             if examples + eval_data_a.shape[0] > max_examples:
-                num = max_examples - examples
-                eval_data_a = eval_data_a[:num]
-                eval_labels_a = eval_labels_a[:num]
-                eval_data_b = eval_data_b[:num]
-                eval_labels_b = eval_labels_b[:num]
+                eval_data_a = eval_data_a[:diff]
+                eval_labels_a = eval_labels_a[:diff]
+
+            if examples + eval_data_b.shape[0] > max_examples:
+                eval_data_b = eval_data_b[:diff]
+                eval_labels_b = eval_labels_b[:diff]
 
             examples += eval_data_a.shape[0]
 
-            # If the number of evaluation examples is not divisible by the batch
-            # size, then the last one will not be a full batch. Thus, we'll need
-            # to pass in the proper domain labels with the correct length.
-            if eval_data_a.shape[0] != batch_size or eval_data_b.shape[0] != batch_size:
-                batch_source_domain = domain_labels(0, eval_data_a.shape[0])
-                batch_target_domain = domain_labels(1, eval_data_b.shape[0])
-            else:
-                batch_source_domain = source_domain
-                batch_target_domain = target_domain
+            # Match the number of examples we have
+            source_domain = domain_labels(0, eval_data_a.shape[0])
+            target_domain = domain_labels(1, eval_data_b.shape[0])
 
             # Log summaries run on the evaluation/validation data
             sess.run(update_metrics_a, feed_dict={
-                x: eval_data_a, y: eval_labels_a, domain: batch_source_domain,
+                x: eval_data_a, y: eval_labels_a, domain: source_domain,
                 keep_prob: 1.0, training: False
             })
             sess.run(update_metrics_b, feed_dict={
-                x: eval_data_b, y: eval_labels_b, domain: batch_target_domain,
+                x: eval_data_b, y: eval_labels_b, domain: target_domain,
                 keep_prob: 1.0, training: False
             })
         except tf.errors.OutOfRangeError:
@@ -101,9 +94,9 @@ def evaluation_plots(sess,
     eval_input_hook_a, eval_input_hook_b,
     next_data_batch_test_a, next_labels_batch_test_a,
     next_data_batch_test_b, next_labels_batch_test_b,
-    source_domain, target_domain,
     feature_extractor, x, keep_prob, training, adaptation,
     extra_model_outputs, num_features, first_step,
+    max_plot_examples=100,
     tsne_filename=None,
     pca_filename=None,
     recon_a_filename=None,
@@ -122,6 +115,19 @@ def evaluation_plots(sess,
         next_data_batch_test_a, next_labels_batch_test_a,
         next_data_batch_test_b, next_labels_batch_test_b,
     ])
+
+    # Limit the number of plots
+    if eval_data_a.shape[0] > max_plot_examples:
+        eval_data_a = eval_data_a[:max_plot_examples]
+        eval_labels_a = eval_labels_a[:max_plot_examples]
+
+    if eval_data_b.shape[0] > max_plot_examples:
+        eval_data_b = eval_data_b[:max_plot_examples]
+        eval_labels_b = eval_labels_b[:max_plot_examples]
+
+    # Match the number of plots we have
+    source_domain = domain_labels(0, eval_data_a.shape[0])
+    target_domain = domain_labels(1, eval_data_b.shape[0])
 
     combined_x = np.concatenate((eval_data_a, eval_data_b), axis=0)
     combined_labels = np.concatenate((eval_labels_a, eval_labels_b), axis=0)
@@ -361,7 +367,8 @@ def train(
         class_weights=1.0,
         plot_gradients=False,
         min_domain_accuracy=0.60,
-        max_examples=5000):
+        max_examples=5000,
+        max_plot_examples=100):
 
     if not os.path.exists(model_dir):
         os.makedirs(model_dir)
@@ -599,7 +606,6 @@ def train(
                     eval_input_hook_a, eval_input_hook_b,
                     next_data_batch_test_a, next_labels_batch_test_a,
                     next_data_batch_test_b, next_labels_batch_test_b,
-                    source_domain, target_domain,
                     x, y, domain, keep_prob, training,
                     batch_size, update_metrics_a, update_metrics_b,
                     max_examples)
@@ -646,9 +652,9 @@ def train(
                     eval_input_hook_a, eval_input_hook_b,
                     next_data_batch_test_a, next_labels_batch_test_a,
                     next_data_batch_test_b, next_labels_batch_test_b,
-                    source_domain, target_domain,
                     feature_extractor, x, keep_prob, training, adaptation,
-                    extra_model_outputs, num_features, first_step)
+                    extra_model_outputs, num_features, first_step,
+                    max_plot_examples)
 
                 for name, buf in plots:
                     # See: https://gist.github.com/gyglim/1f8dfb1b5c82627ae3efcfbbadb9f514
@@ -773,6 +779,8 @@ if __name__ == '__main__':
         help="Log weights, plots, etc. every so many steps (default 1000)")
     parser.add_argument('--max-examples', default=5000, type=int,
         help="Max number of examples to evaluate for validation (default 5000)")
+    parser.add_argument('--max-plot-examples', default=100, type=int,
+        help="Max number of examples to use for plotting (default 100)")
     parser.add_argument('--balance', dest='balance', action='store_true',
         help="On high class imbalances (e.g. MIMIC-III) weight the loss function (default)")
     parser.add_argument('--no-balance', dest='balance', action='store_false',
@@ -999,4 +1007,5 @@ if __name__ == '__main__':
             multi_class=multi_class,
             bidirectional=args.bidirectional,
             class_weights=class_weights,
-            max_examples=args.max_examples)
+            max_examples=args.max_examples,
+            max_plot_examples=args.max_plot_examples)
