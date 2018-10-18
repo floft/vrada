@@ -349,7 +349,6 @@ def train(
         bidirectional=False,
         class_weights=1.0,
         plot_gradients=False,
-        use_grl=True,
         min_domain_accuracy=0.60,
         max_examples=5000):
 
@@ -401,7 +400,7 @@ def train(
     feature_extractor, model_summaries, extra_model_outputs = \
         model_func(x, y, domain, grl_lambda, keep_prob, training,
             num_classes, num_features, adaptation, units, multi_class,
-            bidirectional, class_weights, use_grl)
+            bidirectional, class_weights)
 
     # Get variables of model - needed if we train in two steps
     variables = tf.trainable_variables()
@@ -514,43 +513,25 @@ def train(
                 combined_labels = np.concatenate((labels_batch_a, np.zeros(labels_batch_b.shape)), axis=0)
                 combined_domain = np.concatenate((source_domain, target_domain), axis=0)
 
-                if use_grl:
-                    # Train everything in one step and domain more next. This seemed
-                    # to work better for me than just nondomain then domain, though
-                    # it seems likely the results would be similar.
-                    sess.run(train_all, feed_dict={
-                        x: combined_x, y: combined_labels, domain: combined_domain,
-                        grl_lambda: grl_lambda_value,
-                        keep_prob: dropout_keep_prob, lr: lr_value, training: True
-                    })
+                # Train everything in one step and domain more next. This seemed
+                # to work better for me than just nondomain then domain, though
+                # it seems likely the results would be similar.
+                sess.run(train_all, feed_dict={
+                    x: combined_x, y: combined_labels, domain: combined_domain,
+                    grl_lambda: grl_lambda_value,
+                    keep_prob: dropout_keep_prob, lr: lr_value, training: True
+                })
 
-                    # Update domain more
-                    #
-                    # Depending on the num_steps, your learning rate, etc. it may be
-                    # beneficial to have a different learning rate here -- hence the
-                    # lr_multiplier option. This may also depend on your dataset though.
-                    sess.run(train_domain, feed_dict={
-                        x: combined_x, y: combined_labels, domain: combined_domain,
-                        grl_lambda: 0.0,
-                        keep_prob: dropout_keep_prob, lr: lr_multiplier*lr_value, training: True
-                    })
-                else:
-                    # An alternative to using a gradient reversal layer is through
-                    # flipping the labels -- the approach used in CyCADA
-                    combined_domain_flip = np.concatenate((target_domain, source_domain), axis=0)
-
-                    # Train to predict data from source labels correctly
-                    sess.run(train_notdomain, feed_dict={
-                        x: combined_x, y: combined_labels, domain: combined_domain_flip,
-                        keep_prob: dropout_keep_prob, lr: lr_value, training: True
-                    })
-
-                    # Train only the domain predictor / discriminator
-                    feed_dict={
-                        x: combined_x, domain: combined_domain,
-                        keep_prob: dropout_keep_prob, lr: lr_multiplier*lr_value, training: True
-                    }
-                    sess.run(train_domain, feed_dict=feed_dict)
+                # Update domain more
+                #
+                # Depending on the num_steps, your learning rate, etc. it may be
+                # beneficial to have a different learning rate here -- hence the
+                # lr_multiplier option. This may also depend on your dataset though.
+                sess.run(train_domain, feed_dict={
+                    x: combined_x, y: combined_labels, domain: combined_domain,
+                    grl_lambda: 0.0,
+                    keep_prob: dropout_keep_prob, lr: lr_multiplier*lr_value, training: True
+                })
             else:
                 # Train task classifier on source domain to be correct
                 sess.run(train_notdomain, feed_dict={
@@ -791,10 +772,6 @@ if __name__ == '__main__':
         help="Use a bidirectional RNN (when selected method includes an RNN)")
     parser.add_argument('--no-bidirectional', dest='bidirectional', action='store_false',
         help="Do not use a bidirectional RNN (default)")
-    parser.add_argument('--grl', dest='grl', action='store_true',
-        help="Use a gradient reversal layer for adaptation (default)")
-    parser.add_argument('--no-grl', dest='grl', action='store_false',
-        help="Do not use a gradient reversal layer for adaptation, instead use label flipping")
     parser.add_argument('--debug', dest='debug', action='store_true',
         help="Start new log/model/images rather than continuing from previous run")
     parser.add_argument('--debug-num', default=-1, type=int,
@@ -806,7 +783,7 @@ if __name__ == '__main__':
         mimic_ahrf=False, mimic_icd9=False, sleep=False,
         trivial_line=False, trivial_sine=False,
         svhn=False, mnist=False, balance=True, bidirectional=False,
-        grl=True, debug=False)
+        debug=False)
     args = parser.parse_args()
 
     # Load datasets - domains A & B
@@ -1011,5 +988,4 @@ if __name__ == '__main__':
             multi_class=multi_class,
             bidirectional=args.bidirectional,
             class_weights=class_weights,
-            use_grl=args.grl,
             max_examples=args.max_examples)

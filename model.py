@@ -267,8 +267,7 @@ def build_model(x, y, domain, grl_lambda, keep_prob, training,
 
 def build_lstm(x, y, domain, grl_lambda, keep_prob, training,
             num_classes, num_features, adaptation, units,
-            multi_class=False, bidirectional=False, class_weights=1.0,
-            use_grl=True):
+            multi_class=False, bidirectional=False, class_weights=1.0):
     """ LSTM for a baseline """
     # Build LSTM
     with tf.variable_scope("rnn_model"):
@@ -283,8 +282,7 @@ def build_lstm(x, y, domain, grl_lambda, keep_prob, training,
     task_output, domain_softmax, task_loss, domain_loss, \
         feature_extractor, summaries = build_model(
             rnn_output, y, domain, grl_lambda, keep_prob, training,
-            num_classes, adaptation, multi_class, class_weights,
-            use_grl=use_grl)
+            num_classes, adaptation, multi_class, class_weights)
 
     # Total loss is the sum
     with tf.variable_scope("total_loss"):
@@ -302,7 +300,7 @@ def build_lstm(x, y, domain, grl_lambda, keep_prob, training,
 def build_vrnn(x, y, domain, grl_lambda, keep_prob, training,
             num_classes, num_features, adaptation, units,
             multi_class=False, bidirectional=False, class_weights=1.0,
-            use_grl=True, eps=1e-9, use_z=True,
+            eps=1e-9, use_z=True,
             log_outputs=False, log_weights=False):
     """ VRNN model """
     # Build VRNN
@@ -334,8 +332,7 @@ def build_vrnn(x, y, domain, grl_lambda, keep_prob, training,
     task_output, domain_softmax, task_loss, domain_loss, \
         feature_extractor, summaries = build_model(
             rnn_output, y, domain, grl_lambda, keep_prob, training,
-            num_classes, adaptation, multi_class, class_weights,
-            use_grl=use_grl)
+            num_classes, adaptation, multi_class, class_weights)
 
     # Loss
     #
@@ -421,8 +418,7 @@ def cnn(x, keep_prob):
 
 def build_cnn(x, y, domain, grl_lambda, keep_prob, training,
             num_classes, num_features, adaptation, units,
-            multi_class=False, bidirectional=False, class_weights=1.0,
-            use_grl=True):
+            multi_class=False, bidirectional=False, class_weights=1.0):
     """ CNN for image data rather than time-series data """
     # Build CNN
     with tf.variable_scope("cnn_model"):
@@ -432,8 +428,7 @@ def build_cnn(x, y, domain, grl_lambda, keep_prob, training,
     task_output, domain_softmax, task_loss, domain_loss, \
         feature_extractor, summaries = build_model(
             cnn_output, y, domain, grl_lambda, keep_prob, training,
-            num_classes, adaptation, multi_class, class_weights,
-            use_grl=use_grl)
+            num_classes, adaptation, multi_class, class_weights)
 
     # Total loss is the sum
     with tf.variable_scope("total_loss"):
