@@ -62,6 +62,17 @@ def update_metrics_on_val(sess,
                 next_data_batch_test_b, next_labels_batch_test_b,
             ])
 
+            # Make sure we don't go over the desired number of examples
+            #
+            # Note: we'll use the number of in domain A since we'll assume our
+            # batch sizes for both are the same.
+            if examples + eval_data_a.shape[0] > max_examples:
+                num = max_examples - examples
+                eval_data_a = eval_data_a[:num]
+                eval_labels_a = eval_labels_a[:num]
+                eval_data_b = eval_data_b[:num]
+                eval_labels_b = eval_labels_b[:num]
+
             examples += eval_data_a.shape[0]
 
             # If the number of evaluation examples is not divisible by the batch
