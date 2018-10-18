@@ -23,7 +23,8 @@ class IteratorInitializerHook(tf.train.SessionRunHook):
         """Initialize the iterator after the session has been created."""
         self.iter_init_func(sess)
 
-def _get_input_fn(features, labels, batch_size, evaluation=False, buffer_size=5000):
+def _get_input_fn(features, labels, batch_size, evaluation=False, buffer_size=5000,
+    eval_shuffle_seed=0):
     iter_init_hook = IteratorInitializerHook()
 
     def input_fn():
@@ -33,7 +34,7 @@ def _get_input_fn(features, labels, batch_size, evaluation=False, buffer_size=50
         dataset = tf.data.Dataset.from_tensor_slices((features_placeholder, labels_placeholder))
 
         if evaluation:
-            dataset = dataset.batch(batch_size)
+            dataset = dataset.shuffle(buffer_size, seed=eval_shuffle_seed).batch(batch_size)
         else:
             dataset = dataset.repeat().shuffle(buffer_size).batch(batch_size)
 
