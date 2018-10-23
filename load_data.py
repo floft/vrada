@@ -535,3 +535,17 @@ def load_data_mimiciii_icd9(data_path="datasets/process-mimic-iii/Data/admdata_9
         test_data_a, test_labels_a, \
         train_data_b, train_labels_b, \
         test_data_b, test_labels_b
+
+def load_data_shl(train_dir, test_dir,
+    domain_a_percent=0.7, train_percent=0.7,
+    seed=0):
+    """
+    Load the Sussex-Huawei Locomotion dataset collected on a smart phone
+
+    Similar to the sleep dataset, this isn't a domain adaptation problem, so
+    to make it one we'll split the dataset into two domains based on something.
+    We'll additionally split those domains into train/validation sets so that
+    we don't use the test data (since nobody during the contest had access to
+    target labels).
+    """
+    # TODO....
