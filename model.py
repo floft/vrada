@@ -45,6 +45,11 @@ def build_rnn(x, keep_prob, create_cell, dropout=True, bidirectional=False):
         outputs, final_state = tf.nn.dynamic_rnn(
             cells[0], x, initial_state=initial_state)
 
+    # TODO
+    # instead of using LSTM in build_lstm and in VRNN use either
+    # tf.contrib.cudnn_rnn.CudnnLSTM or tf.keras.layers.CuDNNLSTM
+    # if using a GPU
+
     return outputs, cells, final_state
 
 def classifier(x, num_classes, keep_prob, training, batch_norm):

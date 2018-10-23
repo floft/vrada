@@ -550,6 +550,28 @@ def train(
                     grl_lambda: 0.0,
                     keep_prob: dropout_keep_prob, lr: lr_multiplier*lr_value, training: True
                 })
+
+                # Train only the domain predictor / discriminator
+                # feed_dict={
+                #     x: combined_x, domain: combined_domain,
+                #     keep_prob: dropout_keep_prob, lr: lr_multiplier*lr_value, training: True
+                # }
+                # sess.run(train_domain, feed_dict=feed_dict)
+                # domain_acc = sess.run(domain_accuracy, feed_dict=feed_dict)
+
+                # print("Iteration", i, "domain acc", domain_acc)
+
+                # # Don't update the rest of the model if the discriminator is
+                # # still really bad -- otherwise its gradient may not be helpful
+                # # for adaptation
+                # if domain_acc > min_domain_accuracy:
+                #     print("    Training rest of model")
+                #     # Train everything except the domain predictor / discriminator but
+                #     # flip labels rather than using GRL (i.e. set lambda=-1)
+                #     sess.run(train_notdomain, feed_dict={
+                #         x: combined_x, y: combined_labels, domain: combined_domain_flip,
+                #         keep_prob: dropout_keep_prob, lr: lr_value, training: True
+                #     })
             else:
                 # Train task classifier on source domain to be correct
                 sess.run(train_notdomain, feed_dict={
