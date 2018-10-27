@@ -535,3 +535,10 @@ def load_data_mimiciii_icd9(data_path="datasets/process-mimic-iii/Data/admdata_9
         test_data_a, test_labels_a, \
         train_data_b, train_labels_b, \
         test_data_b, test_labels_b
+
+# Load our watch activity prediction dataset
+def load_data_watch(dir_name):
+    """
+    Loads watch activity prediction dataset
+    """
+    pass
