@@ -151,10 +151,10 @@ def load_data_sleep(dir_name, domain_a_percent=0.7, train_percent=0.7, seed=0):
 
     for f in files:
         # Extract data from file
-        exp_data = np.load(f).item()
-        subject = exp_data['subject']
-        stage_labels = exp_data['stage']
-        rf = exp_data['rf']
+        d = np.load(f).item()
+        subject = d['subject']
+        stage_labels = d['stage']
+        rf = d['rf']
 
         # Split 5 complex features into 5 real and 5 imaginary, i.e. now we
         # have 10 features
@@ -541,4 +541,38 @@ def load_data_watch(dir_name):
     """
     Loads watch activity prediction dataset
     """
-    pass
+    # files = pathlib.Path(dir_name).glob("*.npy")
+
+    # for f in files:
+    #     # Extract data from file
+    #     d = np.load(f).item()
+    #     name = d["name"]
+    #     times = d["times"]
+    #     features = d["features"]
+    #     labels = d["labels"]
+
+    # return train_data_a, train_labels_a, \
+    #     test_data_a, test_labels_a, \
+    #     train_data_b, train_labels_b, \
+    #     test_data_b, test_labels_b
+    raise NotImplementedError
+
+
+# Load our smart home activity prediction dataset
+def load_data_home(dir_name):
+    """
+    Loads watch activity prediction dataset
+    """
+    files = pathlib.Path(dir_name).glob("*.npy")
+
+    for f in files:
+        # Extract data from file
+        d = np.load(f).item()
+        name = os.path.splitext(f)[0]
+        features = d["features"]
+        labels = d["labels"]
+
+    return train_data_a, train_labels_a, \
+        test_data_a, test_labels_a, \
+        train_data_b, train_labels_b, \
+        test_data_b, test_labels_b

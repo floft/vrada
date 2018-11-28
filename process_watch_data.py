@@ -193,7 +193,7 @@ def al_to_numpy(file):
         - label array - e.g. label 0 in the numpy array corresponds to "car"
     """
     # Get data from file
-    al_data, _, _, unique_labels, _ = load_al_activity_times(file)
+    al_data, unique_sensor_names, _, unique_labels, _ = load_al_activity_times(file)
 
     # Convert to a numpy array
     data = []
