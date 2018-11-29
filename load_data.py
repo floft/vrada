@@ -537,7 +537,7 @@ def load_data_mimiciii_icd9(data_path="datasets/process-mimic-iii/Data/admdata_9
         test_data_b, test_labels_b
 
 # Load our watch activity prediction dataset
-def load_data_watch(dir_name):
+def load_data_watch(dir_name="datasets/watch"):
     """
     Loads watch activity prediction dataset
     """
@@ -557,20 +557,91 @@ def load_data_watch(dir_name):
     #     test_data_b, test_labels_b
     raise NotImplementedError
 
+def load_npy(filename, encoding='latin1'):
+    """
+    Load x,y data from npy file
+
+    We specifically use latin1 encoding since it's pickled in Python 2 and
+    unpickled here in Python 3. Otherwise we get an "'ascii' codec can't decode
+    byte" error. See: https://stackoverflow.com/a/11314602
+    """
+    d = np.load(filename, encoding=encoding).item()
+    features = d["features"]
+    labels = d["labels"]
+    return features, labels
+
+def create_windows(x, y, window_size):
+    """
+    Concatenate along dim-1 to meet the desired window_size (e.g. window 0
+    will be a list of examples 0,1,2,3,4 and the label of example 4). We'll
+    skip any windows that reach beyond the end.
+    """
+    windows_x = []
+    windows_y = []
+
+    for i in range(len(y)-window_size):
+        # Make it (1,window_size,# features)
+        window_x = np.expand_dims(np.concatenate(x[i:i+window_size], axis=0), axis=0)
+        window_y = y[i+window_size-1]
+
+        windows_x.append(window_x)
+        windows_y.append(window_y)
+
+    windows_x = np.vstack(windows_x)
+    windows_y = np.hstack(windows_y)
+
+    return windows_x, windows_y
 
 # Load our smart home activity prediction dataset
-def load_data_home(dir_name):
+def load_data_home(dir_name="datasets/smarthome", A="ihs95", B="ihs117",
+    train_percent=0.7, seed=0, window_size=5):
     """
     Loads watch activity prediction dataset
     """
+    # Get A and B domain data/labels
     files = pathlib.Path(dir_name).glob("*.npy")
+    a_x = None
+    b_x = None
 
     for f in files:
-        # Extract data from file
-        d = np.load(f).item()
-        name = os.path.splitext(f)[0]
-        features = d["features"]
-        labels = d["labels"]
+        if f.stem == A:
+            a_x, a_y = load_npy(f)
+        elif f.stem == B:
+            b_x, b_y = load_npy(f)
+
+    assert a_x is not None and b_x is not None, "Must find A and B domains"
+
+    # Expand dimensions to be (# examples, 1, # features)
+    a_x = np.expand_dims(a_x, axis=1)
+    b_x = np.expand_dims(b_x, axis=1)
+
+    # Concatenate along dim-1 to meet the desired window_size (e.g. window 0
+    # will be a list of examples 0,1,2,3,4 and the label of example 4). We'll
+    # skip any windows that reach beyond the end.
+    #
+    # Note: above we expanded to be window_size==1, so if that's the case, we're
+    # already done.
+    if window_size != 1:
+        a_x, a_y = create_windows(a_x, a_y, window_size)
+        b_x, b_y = create_windows(b_x, b_y, window_size)
+
+    # Shuffle data (using our seed for repeatability)
+    a_x, a_y = shuffle_together_np(a_x, a_y, seed)
+    b_x, b_y = shuffle_together_np(b_x, b_y, seed+1)
+
+    # Split into training and testing sets
+    training_end_a = math.ceil(train_percent*len(a_y))
+    training_end_b = math.ceil(train_percent*len(b_y))
+
+    train_data_a = a_x[:training_end_a]
+    train_data_b = b_x[:training_end_b]
+    test_data_a = a_x[training_end_a:]
+    test_data_b = b_x[training_end_b:]
+
+    train_labels_a = a_y[:training_end_a]
+    train_labels_b = b_y[:training_end_b]
+    test_labels_a = a_y[training_end_a:]
+    test_labels_b = b_y[training_end_b:]
 
     return train_data_a, train_labels_a, \
         test_data_a, test_labels_a, \

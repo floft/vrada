@@ -26,7 +26,7 @@ from load_data import IteratorInitializerHook, \
     load_data, one_hot, \
     domain_labels, _get_input_fn, \
     load_data_sleep, load_data_mimiciii_ahrf, load_data_mimiciii_icd9, \
-    load_data_watch
+    load_data_watch, load_data_home
 from image_datasets import svhn, mnist
 
 def update_metrics_on_val(sess,
@@ -768,6 +768,10 @@ if __name__ == '__main__':
         help="Run on the watch dataset")
     parser.add_argument('--no-watch', dest='watch', action='store_false',
         help="Do not run on the watch dataset (default)")
+    parser.add_argument('--home', dest='home', action='store_true',
+        help="Run on the smart home dataset")
+    parser.add_argument('--no-home', dest='home', action='store_false',
+        help="Do not run on the smart home dataset (default)")
     parser.add_argument('--trivial-line', dest='trivial_line', action='store_true',
         help="Run on the trivial synthetic line dataset")
     parser.add_argument('--no-trivial-line', dest='trivial_line', action='store_false',
@@ -828,15 +832,15 @@ if __name__ == '__main__':
         lstm_da=False, vrnn_da=False, cnn_da=False,
         mimic_ahrf=False, mimic_icd9=False, sleep=False,
         trivial_line=False, trivial_sine=False,
-        svhn=False, mnist=False, watch=False, balance=True, bidirectional=False,
-        debug=False)
+        svhn=False, mnist=False, home=False, watch=False, balance=True,
+        bidirectional=False, debug=False)
     args = parser.parse_args()
 
     # Load datasets - domains A & B
     assert args.mimic_ahrf + args.mimic_icd9 + \
         + args.sleep \
         + args.trivial_line + args.trivial_sine \
-        + args.svhn + args.mnist == 1 + args.watch, \
+        + args.svhn + args.mnist + args.watch + args.home == 1, \
         "Must specify exactly one dataset to use"
 
     if args.trivial_line:
@@ -948,7 +952,20 @@ if __name__ == '__main__':
         train_data_a, train_labels_a, \
         test_data_a, test_labels_a, \
         train_data_b, train_labels_b, \
-        test_data_b, test_labels_b = load_data_watch("datasets/watch")
+        test_data_b, test_labels_b = load_data_watch()
+
+        # Information about dataset
+        index_one = False # Labels start from 0
+        num_features = train_data_a.shape[2]
+        time_steps = train_data_a.shape[1]
+        num_classes = len(np.unique(train_labels_a))
+        multi_class = False # Predict only one class
+        class_weights = 1.0 # TODO check if balanced
+    elif args.home:
+        train_data_a, train_labels_a, \
+        test_data_a, test_labels_a, \
+        train_data_b, train_labels_b, \
+        test_data_b, test_labels_b = load_data_home()
 
         # Information about dataset
         index_one = False # Labels start from 0
