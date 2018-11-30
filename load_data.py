@@ -5,6 +5,7 @@ Functions to load the data into TensorFlow
 """
 import os
 import math
+import h5py
 import random
 import pathlib
 import numpy as np
@@ -570,6 +571,15 @@ def load_npy(filename, encoding='latin1'):
     labels = d["labels"]
     return features, labels
 
+def load_hdf5(filename, encoding='latin1'):
+    """
+    Load x,y data from hdf5 file
+    """
+    d = h5py.File(filename, "r")
+    features = d["features"]
+    labels = d["labels"]
+    return features, labels
+
 def create_windows(x, y, window_size):
     """
     Concatenate along dim-1 to meet the desired window_size (e.g. window 0
@@ -599,15 +609,15 @@ def load_data_home(dir_name="datasets/smarthome", A="ihs95", B="ihs117",
     Loads watch activity prediction dataset
     """
     # Get A and B domain data/labels
-    files = pathlib.Path(dir_name).glob("*.npy")
+    files = pathlib.Path(dir_name).glob("*.hdf5")
     a_x = None
     b_x = None
 
     for f in files:
         if f.stem == A:
-            a_x, a_y = load_npy(f)
+            a_x, a_y = load_hdf5(f)
         elif f.stem == B:
-            b_x, b_y = load_npy(f)
+            b_x, b_y = load_hdf5(f)
 
     assert a_x is not None and b_x is not None, "Must find A and B domains"
 

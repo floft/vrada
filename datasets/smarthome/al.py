@@ -12,6 +12,7 @@ import gzip
 import numpy as np
 import os
 import sys
+import h5py
 import time
 import datetime
 from datetime import datetime
@@ -45,6 +46,7 @@ prevwin2 = 0
 wincnt = 0
 n_clusters = 2
 DataFileName = "data"
+OutputFileName = "data.hdf5"
 IgnoreOther = 0
 ClusterOther = 0
 NoOverlap = 0 # Do not allow windows to overlap
@@ -263,12 +265,14 @@ def ReadData():
    NumData = len(data)
 
    # Save the features and labels for use later and exit
-   np.save("data.npy", {
-       "features": np.array(data),
-       "labels": np.array(labels),
-   })
+   # np.save(OutputFileName, {
+   #     "features": np.array(data),
+   #     "labels": np.array(labels),
+   # })
+   d = h5py.File(OutputFileName, "w")
+   d.create_dataset("features", data=np.array(data), compression="gzip")
+   d.create_dataset("labels", data=np.array(labels), compression="gzip")
    sys.exit(0)
-
 
 # Cluster the Other_Activity class into subclasses
 def ClusterOtherClass():
@@ -673,6 +677,10 @@ if __name__ == "__main__":
       ReadConfig(sys.argv[1])
       if len(sys.argv) > 2: # Read data file name
          DataFileName = sys.argv[2]
+      if len(sys.argv) > 3: # Read output file name
+         OutputFileName = sys.argv[3]
+
+      print "Config", sys.argv[1], "Data", DataFileName, "Output", OutputFileName
    else:
       ReadConfig("al.config")
 

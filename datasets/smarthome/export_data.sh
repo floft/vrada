@@ -5,27 +5,26 @@
 #
 # Usage: ./export_data.sh casas/*.al
 #
-echo "Updating sensor list"
+if [[ -z $1 ]]; then
+    echo "Usage: time ./export_data.sh ../watch/casas/*.al"
+    exit 1
+fi
+
+echo "Updating sensor/activity lists"
 sensor_names="$(cat "$@" | cut -d' ' -f3 | sort -u | tr '\n' ' ')"
 activity_labels="$(cat "$@" | cut -d' ' -f5 | sort -u | tr '\n' ' ')"
 sed -i "s#^sensors .*\$#sensors $sensor_names#g" "al.config"
 sed -i "s#^activities .*\$#activities $activity_labels#g" "al.config"
 
+. /scripts/threading
+thread_init
+
 for i; do
-    ln -s "$i" "data"
-
-    # Generate data.npy features and labels file
     echo "Processing $i"
-    python2 al.py
-
-    # Save data.npy
-    if [[ -e data.npy ]]; then
-        filename=$(basename -- "$i")
-        filename="${filename%.*}"
-        mv "data.npy" "${filename}.npy"
-    else
-        echo "Warning: no data.npy file found, an error occured"
-    fi
-
-    unlink "data"
+    filename=$(basename -- "$i")
+    filename="${filename%.*}"
+    python2 al.py al.config "$i" "${filename}.hdf5" &
+    thread_wait
 done
+
+thread_finish
