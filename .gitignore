@@ -16,6 +16,7 @@ commands.txt
 
 # Datasets
 *.npy*
+*.hdf5*
 RFSleep/
 trivial/
 mimic-iii/

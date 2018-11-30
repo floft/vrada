@@ -571,13 +571,13 @@ def load_npy(filename, encoding='latin1'):
     labels = d["labels"]
     return features, labels
 
-def load_hdf5(filename, encoding='latin1'):
+def load_hdf5(filename):
     """
     Load x,y data from hdf5 file
     """
     d = h5py.File(filename, "r")
-    features = d["features"]
-    labels = d["labels"]
+    features = np.array(d["features"])
+    labels = np.array(d["labels"])
     return features, labels
 
 def create_windows(x, y, window_size):
@@ -660,3 +660,4 @@ def load_data_home(dir_name="datasets/smarthome", A="ihs95", B="ihs117",
 
 if __name__ == "__main__":
     load_data_home()
+    #x, y = load_hdf5("datasets/smarthome/ihs118.hdf5")
