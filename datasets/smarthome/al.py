@@ -180,6 +180,7 @@ def FindActivity(aname):
       i = activitynames.index(aname)
       return i
    except:
+      print "Warning: could not find activity", aname, "-- will add to list"
       if Mode == "TEST":
          print "Could not find activity ", aname
          return -1

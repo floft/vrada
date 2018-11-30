@@ -647,3 +647,6 @@ def load_data_home(dir_name="datasets/smarthome", A="ihs95", B="ihs117",
         test_data_a, test_labels_a, \
         train_data_b, train_labels_b, \
         test_data_b, test_labels_b
+
+if __name__ == "__main__":
+    load_data_home()

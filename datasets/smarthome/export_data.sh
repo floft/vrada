@@ -7,7 +7,9 @@
 #
 echo "Updating sensor list"
 sensor_names="$(cat "$@" | cut -d' ' -f3 | sort -u | tr '\n' ' ')"
+activity_labels="$(cat "$@" | cut -d' ' -f5 | sort -u | tr '\n' ' ')"
 sed -i "s#^sensors .*\$#sensors $sensor_names#g" "al.config"
+sed -i "s#^activities .*\$#activities $activity_labels#g" "al.config"
 
 for i; do
     ln -s "$i" "data"
