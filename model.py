@@ -7,6 +7,7 @@ import tensorflow as tf
 layers = tf.contrib.layers
 framework = tf.contrib.framework
 
+from tcn import TemporalConvNet
 from VRNN import VRNNCell
 from flip_gradient import flip_gradient
 
@@ -269,6 +270,34 @@ def build_model(x, y, domain, grl_lambda, keep_prob, training,
 
     return task_output, domain_softmax, task_loss, domain_loss, \
         feature_extractor, summaries
+
+def build_tcn(x, y, domain, grl_lambda, keep_prob, training,
+            num_classes, num_features, adaptation, units,
+            multi_class=False, bidirectional=False, class_weights=1.0):
+    """ TCN as an alternative to using RNNs """
+    # Build TCN
+    with tf.variable_scope("tcn_model"):
+        tcn = TemporalConvNet([units, units, units, units], 3, keep_prob)
+        tcn_output = tcn(x, training=training)[:, -1]
+
+    # Other model components passing in output from TCN
+    task_output, domain_softmax, task_loss, domain_loss, \
+        feature_extractor, summaries = build_model(
+            tcn_output, y, domain, grl_lambda, keep_prob, training,
+            num_classes, adaptation, multi_class, class_weights)
+
+    # Total loss is the sum
+    with tf.variable_scope("total_loss"):
+        total_loss = task_loss
+
+        if adaptation:
+            total_loss += domain_loss
+
+    # We can't generate with a TCN
+    extra_outputs = None
+
+    return task_output, domain_softmax, total_loss, \
+        feature_extractor, summaries, extra_outputs
 
 def build_lstm(x, y, domain, grl_lambda, keep_prob, training,
             num_classes, num_features, adaptation, units,

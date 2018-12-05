@@ -21,7 +21,7 @@ mpl.use('Agg')
 import matplotlib.pyplot as plt
 
 from plot import plot_embedding, plot_random_time_series, plot_real_time_series
-from model import build_lstm, build_vrnn, build_cnn
+from model import build_lstm, build_vrnn, build_cnn, build_tcn
 from load_data import IteratorInitializerHook, \
     load_data, one_hot, \
     domain_labels, _get_input_fn, \
@@ -750,6 +750,14 @@ if __name__ == '__main__':
         help="Use CNN-DA model (for MNIST or SVHN)")
     parser.add_argument('--no-cnn-da', dest='cnn_da', action='store_false',
         help="Do not use CNN-DA model (default)")
+    parser.add_argument('--tcn', dest='tcn', action='store_true',
+        help="Use TCN model (for MNIST or SVHN)")
+    parser.add_argument('--no-tcn', dest='tcn', action='store_false',
+        help="Do not use TCN model (default)")
+    parser.add_argument('--tcn-da', dest='tcn_da', action='store_true',
+        help="Use TCN-DA model (for MNIST or SVHN)")
+    parser.add_argument('--no-tcn-da', dest='tcn_da', action='store_false',
+        help="Do not use TCN-DA model (default)")
     parser.add_argument('--mimic-icd9', dest='mimic_icd9', action='store_true',
         help="Run on the MIMIC-III ICD-9 code prediction dataset")
     parser.add_argument('--no-mimic-icd9', dest='mimic_icd9', action='store_false',
@@ -828,8 +836,8 @@ if __name__ == '__main__':
         help="Specify exact log/model/images number to use rather than incrementing from last. " \
             +"(Don't pass both this and --debug at the same time.)")
     parser.set_defaults(
-        lstm=False, vrnn=False, cnn=False,
-        lstm_da=False, vrnn_da=False, cnn_da=False,
+        lstm=False, vrnn=False, cnn=False, tcn=False,
+        lstm_da=False, vrnn_da=False, cnn_da=False, tcn_da=False,
         mimic_ahrf=False, mimic_icd9=False, sleep=False,
         trivial_line=False, trivial_sine=False,
         svhn=False, mnist=False, home=False, watch=False, balance=True,
@@ -994,7 +1002,7 @@ if __name__ == '__main__':
 
     # Train model using selected dataset and method
     assert args.lstm + args.vrnn + args.lstm_da + args.vrnn_da \
-        + args.cnn + args.cnn_da == 1, \
+        + args.cnn + args.cnn_da + args.tcn + args.tcn_da == 1, \
         "Must specify exactly one method to run"
 
     if args.lstm:
@@ -1021,6 +1029,14 @@ if __name__ == '__main__':
         prefix = "cnn-da"
         adaptation = True
         model_func = build_cnn
+    elif args.tcn:
+        prefix = "tcn"
+        adaptation = False
+        model_func = build_tcn
+    elif args.tcn_da:
+        prefix = "tcn-da"
+        adaptation = True
+        model_func = build_tcn
 
     # Use the number specified on the command line (higher precidence than --debug)
     if args.debug_num >= 0:
