@@ -21,7 +21,7 @@ mpl.use('Agg')
 import matplotlib.pyplot as plt
 
 from plot import plot_embedding, plot_random_time_series, plot_real_time_series
-from model import build_lstm, build_vrnn, build_cnn, build_tcn
+from model import build_lstm, build_vrnn, build_cnn, build_tcn, build_flat
 from load_data import IteratorInitializerHook, \
     load_data, one_hot, \
     domain_labels, _get_input_fn, \
@@ -419,7 +419,7 @@ def train(
     feature_extractor, model_summaries, extra_model_outputs = \
         model_func(x, y, domain, grl_lambda, keep_prob, training,
             num_classes, num_features, adaptation, units, multi_class,
-            bidirectional, class_weights)
+            bidirectional, class_weights, x_dims)
 
     # Get variables of model - needed if we train in two steps
     variables = tf.trainable_variables()
@@ -751,13 +751,21 @@ if __name__ == '__main__':
     parser.add_argument('--no-cnn-da', dest='cnn_da', action='store_false',
         help="Do not use CNN-DA model (default)")
     parser.add_argument('--tcn', dest='tcn', action='store_true',
-        help="Use TCN model (for MNIST or SVHN)")
+        help="Use TCN model")
     parser.add_argument('--no-tcn', dest='tcn', action='store_false',
         help="Do not use TCN model (default)")
     parser.add_argument('--tcn-da', dest='tcn_da', action='store_true',
-        help="Use TCN-DA model (for MNIST or SVHN)")
+        help="Use TCN-DA model")
     parser.add_argument('--no-tcn-da', dest='tcn_da', action='store_false',
         help="Do not use TCN-DA model (default)")
+    parser.add_argument('--flat', dest='flat', action='store_true',
+        help="Use flat model, i.e. only flatten input fed to feature extractor")
+    parser.add_argument('--no-flat', dest='flat', action='store_false',
+        help="Do not use flat model (default)")
+    parser.add_argument('--flat-da', dest='flat_da', action='store_true',
+        help="Use flat-DA model")
+    parser.add_argument('--no-flat-da', dest='flat_da', action='store_false',
+        help="Do not use flat-DA model (default)")
     parser.add_argument('--mimic-icd9', dest='mimic_icd9', action='store_true',
         help="Run on the MIMIC-III ICD-9 code prediction dataset")
     parser.add_argument('--no-mimic-icd9', dest='mimic_icd9', action='store_false',
@@ -788,6 +796,14 @@ if __name__ == '__main__':
         help="Run on the trivial synthetic sine dataset")
     parser.add_argument('--no-trivial-sine', dest='trivial_sine', action='store_false',
         help="Do not run on the trivial synthetic sine dataset (default)")
+    parser.add_argument('--trivial-line-noise', dest='trivial_line_noise', action='store_true',
+        help="Run on the trivial synthetic line noise dataset")
+    parser.add_argument('--no-trivial-line-noise', dest='trivial_line_noise', action='store_false',
+        help="Do not run on the trivial synthetic line noise dataset (default)")
+    parser.add_argument('--trivial-sine-noise', dest='trivial_sine_noise', action='store_true',
+        help="Run on the trivial synthetic sine noise dataset")
+    parser.add_argument('--no-trivial-sine-noise', dest='trivial_sine_noise', action='store_false',
+        help="Do not run on the trivial synthetic sine noise dataset (default)")
     parser.add_argument('--svhn', dest='svhn', action='store_true',
         help="Run on SVHN to MNIST (make sure you use CNN)")
     parser.add_argument('--no-svhn', dest='svhn', action='store_false',
@@ -836,18 +852,20 @@ if __name__ == '__main__':
         help="Specify exact log/model/images number to use rather than incrementing from last. " \
             +"(Don't pass both this and --debug at the same time.)")
     parser.set_defaults(
-        lstm=False, vrnn=False, cnn=False, tcn=False,
-        lstm_da=False, vrnn_da=False, cnn_da=False, tcn_da=False,
+        lstm=False, vrnn=False, cnn=False, tcn=False, flat=False,
+        lstm_da=False, vrnn_da=False, cnn_da=False, tcn_da=False, flat_da=False,
         mimic_ahrf=False, mimic_icd9=False, sleep=False,
         trivial_line=False, trivial_sine=False,
+        trivial_line_noise=False, trivial_sine_noise=False,
         svhn=False, mnist=False, home=False, watch=False, balance=True,
         bidirectional=False, debug=False)
     args = parser.parse_args()
 
     # Load datasets - domains A & B
-    assert args.mimic_ahrf + args.mimic_icd9 + \
+    assert args.mimic_ahrf + args.mimic_icd9 \
         + args.sleep \
         + args.trivial_line + args.trivial_sine \
+        + args.trivial_line_noise + args.trivial_sine_noise \
         + args.svhn + args.mnist + args.watch + args.home == 1, \
         "Must specify exactly one dataset to use"
 
@@ -871,6 +889,34 @@ if __name__ == '__main__':
         test_data_a, test_labels_a = load_data("datasets/trivial/positive_sine_TEST")
         train_data_b, train_labels_b = load_data("datasets/trivial/positive_sine_low_TRAIN")
         test_data_b, test_labels_b = load_data("datasets/trivial/positive_sine_low_TEST")
+
+        # Information about dataset - same for both domains on these datasets
+        index_one = True # Labels start from 1 not 0
+        num_features = 1
+        time_steps = train_data_a.shape[1]
+        num_classes = len(np.unique(train_labels_a))
+        multi_class = False # Predict only one class
+        class_weights = 1.0 # Already balanced
+    elif args.trivial_line_noise:
+        # Add noise
+        train_data_a, train_labels_a = load_data("datasets/trivial/positive_slope_TRAIN")
+        test_data_a, test_labels_a = load_data("datasets/trivial/positive_slope_TEST")
+        train_data_b, train_labels_b = load_data("datasets/trivial/positive_slope_noise_TRAIN")
+        test_data_b, test_labels_b = load_data("datasets/trivial/positive_slope_noise_TEST")
+
+        # Information about dataset - same for both domains on these datasets
+        index_one = True # Labels start from 1 not 0
+        num_features = 1
+        time_steps = train_data_a.shape[1]
+        num_classes = len(np.unique(train_labels_a))
+        multi_class = False # Predict only one class
+        class_weights = 1.0 # Already balanced
+    elif args.trivial_sine_noise:
+        # Add noise
+        train_data_a, train_labels_a = load_data("datasets/trivial/positive_sine_TRAIN")
+        test_data_a, test_labels_a = load_data("datasets/trivial/positive_sine_TEST")
+        train_data_b, train_labels_b = load_data("datasets/trivial/positive_sine_noise_TRAIN")
+        test_data_b, test_labels_b = load_data("datasets/trivial/positive_sine_noise_TEST")
 
         # Information about dataset - same for both domains on these datasets
         index_one = True # Labels start from 1 not 0
@@ -1002,7 +1048,8 @@ if __name__ == '__main__':
 
     # Train model using selected dataset and method
     assert args.lstm + args.vrnn + args.lstm_da + args.vrnn_da \
-        + args.cnn + args.cnn_da + args.tcn + args.tcn_da == 1, \
+        + args.cnn + args.cnn_da + args.tcn + args.tcn_da \
+        + args.flat + args.flat_da == 1, \
         "Must specify exactly one method to run"
 
     if args.lstm:
@@ -1037,6 +1084,14 @@ if __name__ == '__main__':
         prefix = "tcn-da"
         adaptation = True
         model_func = build_tcn
+    elif args.flat:
+        prefix = "flat"
+        adaptation = False
+        model_func = build_flat
+    elif args.flat_da:
+        prefix = "flat-da"
+        adaptation = True
+        model_func = build_flat
 
     # Use the number specified on the command line (higher precidence than --debug)
     if args.debug_num >= 0:

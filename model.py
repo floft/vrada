@@ -3,6 +3,7 @@ Create models
 
 This provides the functions like build_lstm and build_vrnn that are used in training.
 """
+import numpy as np
 import tensorflow as tf
 layers = tf.contrib.layers
 framework = tf.contrib.framework
@@ -273,11 +274,13 @@ def build_model(x, y, domain, grl_lambda, keep_prob, training,
 
 def build_tcn(x, y, domain, grl_lambda, keep_prob, training,
             num_classes, num_features, adaptation, units,
-            multi_class=False, bidirectional=False, class_weights=1.0):
+            multi_class=False, bidirectional=False, class_weights=1.0,
+            x_dims=None):
     """ TCN as an alternative to using RNNs """
     # Build TCN
     with tf.variable_scope("tcn_model"):
-        tcn = TemporalConvNet([units, units, units, units], 3, keep_prob)
+        dropout = 1-keep_prob
+        tcn = TemporalConvNet([units, units, units, units], 2, dropout)
         tcn_output = tcn(x, training=training)[:, -1]
 
     # Other model components passing in output from TCN
@@ -299,9 +302,44 @@ def build_tcn(x, y, domain, grl_lambda, keep_prob, training,
     return task_output, domain_softmax, total_loss, \
         feature_extractor, summaries, extra_outputs
 
+def build_flat(x, y, domain, grl_lambda, keep_prob, training,
+            num_classes, num_features, adaptation, units,
+            multi_class=False, bidirectional=False, class_weights=1.0,
+            x_dims=None):
+    """ Flatten the input and pass directly to the feature extractor
+
+    Note: only need x_dims in build_flat none of the other build_* since here
+    we must know the time steps * features since we directly feed into a dense
+    layer, which requires a known size.
+    """
+    # Only flatten data -- reshape from [batch, time steps, features]
+    # to be [batch, time steps * features], i.e. [batch_size, -1] except Dense
+    # doesn't work with size None
+    with tf.variable_scope("flat_model"):
+        flat_output = tf.reshape(x, [tf.shape(x)[0], np.prod(x_dims)])
+
+    # Other model components passing in output from above
+    task_output, domain_softmax, task_loss, domain_loss, \
+        feature_extractor, summaries = build_model(
+            flat_output, y, domain, grl_lambda, keep_prob, training,
+            num_classes, adaptation, multi_class, class_weights)
+
+    # Total loss is the sum
+    with tf.variable_scope("total_loss"):
+        total_loss = task_loss
+
+        if adaptation:
+            total_loss += domain_loss
+
+    extra_outputs = None
+
+    return task_output, domain_softmax, total_loss, \
+        feature_extractor, summaries, extra_outputs
+
 def build_lstm(x, y, domain, grl_lambda, keep_prob, training,
             num_classes, num_features, adaptation, units,
-            multi_class=False, bidirectional=False, class_weights=1.0):
+            multi_class=False, bidirectional=False, class_weights=1.0,
+            x_dims=None):
     """ LSTM for a baseline """
     # Build LSTM
     with tf.variable_scope("rnn_model"):
@@ -334,7 +372,7 @@ def build_lstm(x, y, domain, grl_lambda, keep_prob, training,
 def build_vrnn(x, y, domain, grl_lambda, keep_prob, training,
             num_classes, num_features, adaptation, units,
             multi_class=False, bidirectional=False, class_weights=1.0,
-            eps=1e-9, use_z=True,
+            x_dims=None, eps=1e-9, use_z=True,
             log_outputs=False, log_weights=False):
     """ VRNN model """
     # Build VRNN
@@ -452,7 +490,8 @@ def cnn(x, keep_prob):
 
 def build_cnn(x, y, domain, grl_lambda, keep_prob, training,
             num_classes, num_features, adaptation, units,
-            multi_class=False, bidirectional=False, class_weights=1.0):
+            multi_class=False, bidirectional=False, class_weights=1.0,
+            x_dims=None):
     """ CNN for image data rather than time-series data """
     # Build CNN
     with tf.variable_scope("cnn_model"):
