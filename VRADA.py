@@ -356,6 +356,7 @@ def train(
         lr_multiplier=1,
         dropout_keep_prob=0.8,
         units=100,
+        use_feature_extractor=True,
         model_dir="models",
         log_dir="logs",
         model_save_steps=1000,
@@ -419,7 +420,7 @@ def train(
     feature_extractor, model_summaries, extra_model_outputs = \
         model_func(x, y, domain, grl_lambda, keep_prob, training,
             num_classes, num_features, adaptation, units, multi_class,
-            bidirectional, class_weights, x_dims)
+            bidirectional, class_weights, x_dims, use_feature_extractor)
 
     # Get variables of model - needed if we train in two steps
     variables = tf.trainable_variables()
@@ -846,6 +847,10 @@ if __name__ == '__main__':
         help="Use a bidirectional RNN (when selected method includes an RNN)")
     parser.add_argument('--no-bidirectional', dest='bidirectional', action='store_false',
         help="Do not use a bidirectional RNN (default)")
+    parser.add_argument('--feature-extractor', dest='feature_extractor', action='store_true',
+        help="Use a feature extractor before task classifier/domain predictor (default)")
+    parser.add_argument('--no-feature-extractor', dest='feature_extractor', action='store_false',
+        help="Do not use a feature extractor")
     parser.add_argument('--debug', dest='debug', action='store_true',
         help="Start new log/model/images rather than continuing from previous run")
     parser.add_argument('--debug-num', default=-1, type=int,
@@ -858,7 +863,7 @@ if __name__ == '__main__':
         trivial_line=False, trivial_sine=False,
         trivial_line_noise=False, trivial_sine_noise=False,
         svhn=False, mnist=False, home=False, watch=False, balance=True,
-        bidirectional=False, debug=False)
+        bidirectional=False, feature_extractor=True, debug=False)
     args = parser.parse_args()
 
     # Load datasets - domains A & B
@@ -1126,6 +1131,7 @@ if __name__ == '__main__':
             learning_rate=args.lr,
             lr_multiplier=args.lr_mult,
             units=args.units,
+            use_feature_extractor=args.feature_extractor,
             batch_size=args.batch,
             dropout_keep_prob=args.dropout,
             model_save_steps=args.model_steps,
