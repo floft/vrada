@@ -294,11 +294,26 @@ def metric_summaries(domain,
             class_predictions = tf.slice(
                 per_class_predictions, [0,i], [tf.shape(task_labels)[0], 1])
 
+            if multi_class:
+                # Note: using the above directly works for multi-class since any
+                # example could be any number of classes. This does not work for
+                # single-prediction since then every prediction has n-1 zeros
+                # for n classes. Thus, class-accuracies are always high.
+                acc_class_y = class_y
+                acc_class_predictions = class_predictions
+            else:
+                # For single-class prediction, we want to first isolate which
+                # examples in the batch were supposed to be class X. Then, of
+                # those, calculate accuracy = correct / total.
+                rows_of_class_y = tf.where(tf.equal(class_y, 1)) # i.e. have 1
+                acc_class_y = tf.gather(class_y, rows_of_class_y)
+                acc_class_predictions = tf.gather(class_predictions, rows_of_class_y)
+
         for j, dataset in enumerate(datasets):
-            with tf.variable_scope("metrics_%s/class_%d/%s" % (domain,i,dataset)):
+            with tf.variable_scope("metrics_%s/class_%s/%s" % (domain,class_name,dataset)):
                 acc, update_acc, reset_acc = create_reset_metric(
                     tf.metrics.accuracy, "acc_%d" % j,
-                    labels=class_y, predictions=class_predictions)
+                    labels=acc_class_y, predictions=acc_class_predictions)
                 tp, update_TP, reset_TP = create_reset_metric(
                     tf.metrics.true_positives, "TP_%d" % j,
                     labels=class_y, predictions=class_predictions)
